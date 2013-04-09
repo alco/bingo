@@ -23,6 +23,33 @@ func TestEmptyStruct(t *testing.T) {
     }
 }
 
+func TestEmptySlice(t *testing.T) {
+    byteSlice := struct {
+        Data []byte
+    }{}
+    p := newParser()
+
+    p.EmitReadStruct(&byteSlice)
+
+    if p.offset != 0 {
+        t.Error("Non-zero offset after reading into zero-length slice (byte)")
+    }
+
+    ///
+
+    intSlice := struct {
+        Data []uint16
+    }{}
+    p = newParser()
+
+    p.EmitReadStruct(&intSlice)
+
+    if p.offset != 0 {
+        t.Error("Non-zero offset after reading into zero-length slice (uint16)")
+    }
+
+}
+
 func TestLength32Little(t *testing.T) {
     s := struct {
         Length uint32
