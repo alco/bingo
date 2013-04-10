@@ -6,7 +6,7 @@ import (
     "encoding/binary"
 )
 
-var someData = []byte{10, 0, 1, 0}
+var someData = []byte{10, 0, 1, 0, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'}
 
 func newParser() *Parser {
     return &Parser{bytes.NewReader(someData), binary.LittleEndian, 0}
@@ -119,5 +119,23 @@ func TestLength16Big(t *testing.T) {
 
     if p.offset != 2 {
         t.Error("Invalid offset after reading uint16 (big):", p.offset)
+    }
+}
+
+func TestSliceByte(t *testing.T) {
+    s := struct {
+        Length uint16
+        Data []byte `len:"Length"`
+    }{}
+    p := newParser()
+
+    p.EmitReadStruct(&s)
+
+    if s.Length != 10 {
+        t.Error("Failed to read correct length for slice (uint16):", s.Length)
+    }
+
+    if string(s.Data) != "\x01\x00abcdefgh" {
+        t.Error("Invalid data read into []byte:", s.Data)
     }
 }
