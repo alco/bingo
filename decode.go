@@ -1,17 +1,17 @@
 package bingo
 
 import (
-    "encoding/binary"
-    "errors"
-    "math"
-    "reflect"
+	"encoding/binary"
+	"errors"
+	"math"
+	"reflect"
 )
 
 type coder struct {
-	order binary.ByteOrder
-	buf   []byte
-    firstField int
-    lastField int
+	order      binary.ByteOrder
+	buf        []byte
+	firstField int
+	lastField  int
 }
 
 type decoder coder
@@ -160,4 +160,3 @@ func sizeof(t reflect.Type) (int, error) {
 	}
 	return 0, errors.New("invalid type " + t.String())
 }
-
