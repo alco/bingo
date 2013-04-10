@@ -459,6 +459,36 @@ func TestPaddedSliceZero(t *testing.T) {
 	}
 }
 
+func TestCustomSliceZero(t *testing.T) {
+	data := []byte{0, 0, 0, 0, 0}
+	type VarStruct struct {
+		DataLength uint16
+		Data       []byte `len:"DataLength"`
+	}
+	s := struct {
+		SomeData uint32
+		Count int8
+		Slice []VarStruct `len:"Count"`
+	}{}
+	p := newParserData(data)
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if s.SomeData != 0 {
+		t.Error("Error parsing uint32:", s.SomeData)
+	}
+	if s.Count != 0 {
+		t.Error("Error parsing int8:", s.Count)
+	}
+	if len(s.Slice) != 0 {
+		t.Error("Error parsing zero-length varsize slice:", s.Slice)
+	}
+	if p.offset != 5 {
+		t.Error("Invalid offset after zero-length varsize slice:", p.offset)
+	}
+}
 
 /* Next up */
 
