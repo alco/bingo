@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"testing"
+	"unicode/utf16"
 )
 
 var someData = []byte{10, 0, 1, 0, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'}
@@ -250,5 +251,33 @@ func TestFixedSizeStructBig(t *testing.T) {
 	}
 	if p.offset != 26 {
 		t.Error("Invalid parser offset after fixed-size struct (big):", p.offset)
+	}
+}
+
+func TestCustomType(t *testing.T) {
+	data := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		4, 0, 0, 0,
+		'a', 0, 'b', 0, 'c', 0, 'd', 0}
+	type UnicodeString struct {
+		Length uint32
+		Chars  []uint16 `len:"Length"`
+	}
+	s := struct {
+		SomeData [10]byte
+		Name     UnicodeString
+	}{}
+
+	p := newParserData(data)
+
+	p.EmitReadStruct(&s)
+
+	if s.Name.Length != 4 {
+		t.Error("Error parsing nested fixed uint32:", s.Name.Length)
+	}
+	if string(utf16.Decode(s.Name.Chars)) != "abcd" {
+		t.Error("Error parsing nested []uint16:", s.Name.Chars)
+	}
+	if p.offset != 10+4+4*2 {
+		t.Error("Invalid offset after custom type *UnicodeString:", p.offset)
 	}
 }

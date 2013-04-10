@@ -3,9 +3,9 @@ package bingo
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
-	/*"fmt"*/
 )
 
 type Parser struct {
@@ -24,7 +24,7 @@ func (p *Parser) EmitReadStruct(data interface{}) {
 	ptrtyp := reflect.TypeOf(data)
 	typ := ptrtyp.Elem()
 	if typ.Kind() != reflect.Struct {
-		p.RaiseError(errors.New("Expected a pointer to a struct"))
+		p.RaiseError(errors.New(fmt.Sprintf("Expected a pointer to a struct. Got %+v", typ.Kind())))
 	}
 	ptrval := reflect.ValueOf(data)
 	val := ptrval.Elem()
@@ -35,6 +35,10 @@ func (p *Parser) EmitReadStruct(data interface{}) {
 		pendingBytes := 0
 		j := i
 		for ; i < nfields; i++ {
+			fieldval := val.Field(i)
+			if fieldval.Kind() == reflect.Ptr && fieldval.IsNil() {
+				break
+			}
 			iface := val.Field(i).Interface()
 			fieldSize := binary.Size(iface)
 			if fieldSize <= 0 {
@@ -81,8 +85,27 @@ func (p *Parser) EmitReadStruct(data interface{}) {
 					p.EmitReadFixed(fieldval.Interface())
 				}
 			case reflect.Struct:
-				p.EmitReadStruct(fieldval.Interface())
-
+				if !fieldval.CanAddr() {
+					p.RaiseError(errors.New("Value cannot Addr()"))
+				}
+				// Construct a pointer to the given field
+				// and pass it to a recursive call
+				tptr := reflect.PtrTo(fieldval.Type())
+				ptr := reflect.New(tptr)
+				ptr.Elem().Set(fieldval.Addr())
+				p.EmitReadStruct(ptr.Elem().Interface())
+			case reflect.Ptr:
+				/*if fieldval.IsNil() {*/
+				/*val := reflect.New(fieldval.Type().Elem())*/
+				/*fmt.Printf("%+v\n", val)*/
+				/*} else {*/
+				/*p.EmitReadStruct(fieldval.Interface())*/
+				/*}*/
+				/*fmt.Printf("%+v\n", fieldval.Type())*/
+				/*fmt.Printf("%+v\n", fieldval.Elem())*/
+				/*fmt.Printf("%+v\n", fieldval.Elem().Kind())*/
+			default:
+				p.RaiseError(errors.New(fmt.Sprintf("Unhandled type %v", fieldval.Kind())))
 			}
 
 			/*// Inspect the field's tag to find out how to parse it*/
