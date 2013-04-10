@@ -5,7 +5,7 @@ import (
     "errors"
     "io"
     "reflect"
-    "fmt"
+    /*"fmt"*/
 )
 
 type Parser struct {
@@ -58,18 +58,18 @@ func (p *Parser) EmitReadStruct(data interface{}) {
                 lenkey := fieldtyp.Tag.Get("len")
                 var lenfield reflect.Value
                 if len(lenkey) > 0 {
-                    fmt.Println("lenkey=", lenkey)
                     lenfield = val.FieldByName(lenkey)
-                    fmt.Println("lenfield=", lenfield)
+
+                    flength := int(lenfield.Interface().(uint16))
+                    slice := reflect.MakeSlice(fieldtyp.Type, flength, flength)
+                    ss := slice.Interface()//.([]byte)
+                    p.EmitReadFixedFast(ss, flength * int(fieldtyp.Type.Size()))
+                    /*p.EmitReadSliceByte(ss)*/
+                    fieldval.Set(slice)
+                } else {
+                    // Length for the slice not specified. Try parsing it as is.
+                    p.EmitReadFixed(fieldval.Interface())
                 }
-
-                flength := int(lenfield.Interface().(uint16))
-                slice := reflect.MakeSlice(fieldtyp.Type, flength, flength)
-                ss := slice.Interface()//.([]byte)
-                p.EmitReadFixedFast(ss, flength * int(fieldtyp.Type.Size()))
-                /*p.EmitReadSliceByte(ss)*/
-                fieldval.Set(slice)
-
             case reflect.Struct:
                 p.EmitReadStruct(fieldval.Interface())
 
