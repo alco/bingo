@@ -22,7 +22,9 @@ func TestEmptyStruct(t *testing.T) {
 	empty := struct{}{}
 	p := newParser()
 
-	p.EmitReadStruct(&empty)
+	if err := p.EmitReadStruct(&empty); err != nil {
+		t.Error(err)
+	}
 
 	if p.offset != 0 {
 		t.Error("Non-zero offset after reading into empty struct")
@@ -35,7 +37,9 @@ func TestEmptySlice(t *testing.T) {
 	}{}
 	p := newParser()
 
-	p.EmitReadStruct(&byteSlice)
+	if err := p.EmitReadStruct(&byteSlice); err != nil {
+		t.Error(err)
+	}
 
 	if p.offset != 0 {
 		t.Error("Non-zero offset after reading into zero-length slice (byte)")
@@ -48,7 +52,9 @@ func TestEmptySlice(t *testing.T) {
 	}{}
 	p = newParser()
 
-	p.EmitReadStruct(&intSlice)
+	if err := p.EmitReadStruct(&intSlice); err != nil {
+		t.Error(err)
+	}
 
 	if p.offset != 0 {
 		t.Error("Non-zero offset after reading into zero-length slice (uint16)")
@@ -62,7 +68,9 @@ func TestLength32Little(t *testing.T) {
 	p := newParser()
 	p.byteOrder = binary.LittleEndian
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
 
 	if s.Length != 0x1000A {
 		t.Error("Failed to read a single-field struct of uint32 (little):", s.Length)
@@ -79,7 +87,9 @@ func TestLength16Little(t *testing.T) {
 	p := newParser()
 	p.byteOrder = binary.LittleEndian
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
 
 	if s.Length != 10 {
 		t.Error("Failed to read a single-field struct of uint16 (little):", s.Length)
@@ -96,7 +106,9 @@ func TestLength32Big(t *testing.T) {
 	p := newParser()
 	p.byteOrder = binary.BigEndian
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
 
 	if s.Length != 0x0A000100 {
 		t.Error("Failed to read a single-field struct of uint32 (big):", s.Length)
@@ -113,7 +125,9 @@ func TestLength16Big(t *testing.T) {
 	p := newParser()
 	p.byteOrder = binary.BigEndian
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
 
 	if s.Length != 0x0A00 {
 		t.Error("Failed to read a single-field struct of uint16 (big):", s.Length)
@@ -130,7 +144,9 @@ func TestSliceByte(t *testing.T) {
 	}{}
 	p := newParser()
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
 
 	if s.Length != 10 {
 		t.Error("Failed to read correct length for slice (uint16):", s.Length)
@@ -151,7 +167,9 @@ func TestSliceInt(t *testing.T) {
 	}{}
 	p := newParserData(data)
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
 
 	if s.Length != 4 {
 		t.Error("Failed to read correct length for slice (uint32):", s.Length)
@@ -185,7 +203,7 @@ type FixedSizeStruct struct {
 }
 
 func (s *FixedSizeStruct) Verify() error {
-	if s.Signature[0] != '' {
+	if s.Signature[0] != 'B' {
 		return errors.New("verification failure")
 	}
 
@@ -196,7 +214,9 @@ func TestFixedSizeStructLittle(t *testing.T) {
 	s := FixedSizeStruct{}
 	p := newParserData(fixedSizeData)
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
 
 	if string(s.Signature[:]) != "BING" {
 		t.Error("Error parsing fixed-size byte array (little):", s.Signature)
@@ -232,7 +252,9 @@ func TestFixedSizeStructBig(t *testing.T) {
 	p := newParserData(fixedSizeData)
 	p.byteOrder = binary.BigEndian
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
 
 	if string(s.Signature[:]) != "BING" {
 		t.Error("Error parsing fixed-size byte array (big):", s.Signature)
@@ -278,7 +300,9 @@ func TestCustomType(t *testing.T) {
 
 	p := newParserData(data)
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
 
 	if s.Name.Length != 4 {
 		t.Error("Error parsing nested fixed uint32:", s.Name.Length)
@@ -309,7 +333,9 @@ func TestCustomTypeEmbed(t *testing.T) {
 
 	p := newParserData(data)
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
 
 	if s.Name.Length != 4 {
 		t.Error("Error parsing nested fixed uint8:", s.Name.Length)
@@ -340,7 +366,9 @@ func TestCustomTypePad(t *testing.T) {
 
 	p := newParserData(data)
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
 
 	if s.Name.Length != 4 {
 		t.Error("Error parsing nested fixed uint8:", s.Name.Length)
@@ -370,7 +398,9 @@ func TestCustomTypeZeroPad(t *testing.T) {
 
 	p := newParserData(data)
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
 
 	if s.Name.Length != 0 {
 		t.Error("Error parsing nested fixed uint8:", s.Name.Length)
@@ -391,7 +421,10 @@ func TestPaddedSlice(t *testing.T) {
 	}{}
 	p := newParserData(data)
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
 	if s.DataLength != 4 {
 		t.Error("Error parsing uint8 length:", s.DataLength)
 	}
@@ -411,7 +444,10 @@ func TestPaddedSliceZero(t *testing.T) {
 	}{}
 	p := newParserData(data)
 
-	p.EmitReadStruct(&s)
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
 	if s.DataLength != 0 {
 		t.Error("Error parsing uint16 length:", s.DataLength)
 	}

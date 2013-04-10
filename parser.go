@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"runtime"
 	"strconv"
 )
 
@@ -20,20 +21,36 @@ type Verifier interface {
 	Verify() error
 }
 
-func (p *Parser) callVerify(data interface{}) {
+func (p *Parser) callVerify(data interface{}) error {
 	if data, ok := data.(Verifier); ok {
 		err := data.Verify()
-		if err != nil {
-			p.RaiseError(err)
-		}
+		return err
 	}
+	return nil
 }
 
-func (p *Parser) EmitReadStruct(data interface{}) {
+func (p *Parser) EmitReadStruct(data interface{}) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(runtime.Error); ok {
+				panic(r)
+			}
+
+			switch x := r.(type) {
+			case error:
+				err = x
+			case string:
+				err = errors.New(x)
+			default:
+				// This should not be reachable unless there's a bug in the package
+				panic(r)
+			}
+		}
+	}()
+
 	// Try fast path for fixed-size data
 	if p.EmitReadFixed(data) {
-		p.callVerify(data)
-		return
+		return p.callVerify(data)
 	}
 
 	// Start reflecting
@@ -122,7 +139,10 @@ func (p *Parser) EmitReadStruct(data interface{}) {
 				ptr := reflect.New(tptr)
 				ptr.Elem().Set(fieldval.Addr())
 
-				p.EmitReadStruct(ptr.Elem().Interface())
+				err := p.EmitReadStruct(ptr.Elem().Interface())
+				if err != nil {
+					p.RaiseError(err)
+				}
 			case reflect.Ptr:
 				/*if fieldval.IsNil() {*/
 				/*val := reflect.New(fieldval.Type().Elem())*/
@@ -172,7 +192,7 @@ func (p *Parser) EmitReadStruct(data interface{}) {
 		}
 	}
 
-	p.callVerify(data)
+	return p.callVerify(data)
 }
 
 func (p *Parser) EmitReadFixed(data interface{}) bool {
