@@ -68,6 +68,21 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 		pendingBytes := 0
 		firstFixedFieldIdx := fieldIdx
 		for ; fieldIdx < nfields; fieldIdx++ {
+			// check for read condition
+			fieldtyp := typ.Field(fieldIdx)
+			ifstr := fieldtyp.Tag.Get("if")
+			if len(ifstr) > 0 {
+				meth, ok := ptrtyp.MethodByName(ifstr)
+				if ok {
+					// TODO: check method signature
+					result := meth.Func.Call([]reflect.Value{ptrval})[0].Interface().(bool)
+					if !result {
+						// Skip this field
+						continue
+					}
+				}
+			}
+
 			fieldval := val.Field(fieldIdx)
 			if fieldval.Kind() == reflect.Ptr && fieldval.IsNil() {
 				break

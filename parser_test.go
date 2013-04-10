@@ -539,7 +539,11 @@ func TestCustomSlice(t *testing.T) {
 
 type DescriptorT struct {
 	ClassIDString UnicodeString
-	ClassID       [4]byte `if:"ClassIDString.Length==0"`
+	ClassID       [4]byte `if:"ShouldParseClassID"`
+}
+
+func (d *DescriptorT) ShouldParseClassID() bool {
+	return d.ClassIDString.Length == 0
 }
 
 func TestOptionalField(t *testing.T) {
