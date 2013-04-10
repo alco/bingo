@@ -490,6 +490,52 @@ func TestCustomSliceZero(t *testing.T) {
 	}
 }
 
+func TestCustomSlice(t *testing.T) {
+	data := []byte{0, 0, 0, 0, // SomeData
+				   3, // Count
+				   0, 0, // DataLength
+				   4, 0, // DataLength
+				   'a', 'b', 'c', 'd', // Data
+				   1, 0, // DataLength
+				   13} // Data
+	type VarStruct struct {
+		DataLength uint16
+		Data       []byte `len:"DataLength"`
+	}
+	s := struct {
+		SomeData uint32
+		Count int8
+		Slice []VarStruct `len:"Count"`
+	}{}
+	p := newParserData(data)
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if s.SomeData != 0 {
+		t.Error("Error parsing uint32:", s.SomeData)
+	}
+	if s.Count != 3 {
+		t.Error("Error parsing int8:", s.Count)
+	}
+	if len(s.Slice) != int(s.Count) {
+		t.Error("Error parsing varsize slice (len):", s.Slice)
+	}
+	if s.Slice[0].DataLength != 0 {
+		t.Error("Error parsing varsize slice (elem 0):", s.Slice)
+	}
+	if string(s.Slice[1].Data) != "abcd" {
+		t.Error("Error parsing varsize slice (elem 1):", s.Slice)
+	}
+	if !(s.Slice[2].DataLength == 1 && s.Slice[2].Data[0] == 13) {
+		t.Error("Error parsing varsize slice (elem 2):", s.Slice)
+	}
+	if p.offset != 16 {
+		t.Error("Invalid offset after varsize slice:", p.offset)
+	}
+}
+
 /* Next up */
 
 // Challenges:

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"runtime"
+	/*"runtime"*/
 	"strconv"
 )
 
@@ -30,23 +30,23 @@ func (p *Parser) callVerify(data interface{}) error {
 }
 
 func (p *Parser) EmitReadStruct(data interface{}) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if _, ok := r.(runtime.Error); ok {
-				panic(r)
-			}
+	/*defer func() {*/
+		/*if r := recover(); r != nil {*/
+			/*if _, ok := r.(runtime.Error); ok {*/
+				/*panic(r)*/
+			/*}*/
 
-			switch x := r.(type) {
-			case error:
-				err = x
-			case string:
-				err = errors.New(x)
-			default:
-				// This should not be reachable unless there's a bug in the package
-				panic(r)
-			}
-		}
-	}()
+			/*switch x := r.(type) {*/
+			/*case error:*/
+				/*err = x*/
+			/*case string:*/
+				/*err = errors.New(x)*/
+			/*default:*/
+				/*// This should not be reachable unless there's a bug in the package*/
+				/*panic(r)*/
+			/*}*/
+		/*}*/
+	/*}()*/
 
 	// Try fast path for fixed-size data
 	if p.EmitReadFixed(data) {
@@ -62,17 +62,17 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 	ptrval := reflect.ValueOf(data)
 	val := ptrval.Elem()
 
-	i := 0
+	fieldIdx := 0
 	nfields := typ.NumField()
-	for i < nfields {
+	for fieldIdx < nfields {
 		pendingBytes := 0
-		j := i
-		for ; i < nfields; i++ {
-			fieldval := val.Field(i)
+		firstFixedFieldIdx := fieldIdx
+		for ; fieldIdx < nfields; fieldIdx++ {
+			fieldval := val.Field(fieldIdx)
 			if fieldval.Kind() == reflect.Ptr && fieldval.IsNil() {
 				break
 			}
-			iface := val.Field(i).Interface()
+			iface := val.Field(fieldIdx).Interface()
 			fieldSize := binary.Size(iface)
 			if fieldSize <= 0 {
 				break
@@ -83,13 +83,13 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 		// We can now read `pendingBytes` bytes before proceeding
 		if pendingBytes > 0 {
 			buf := p.EmitReadNBytes(pendingBytes)
-			d := &decoder{order: p.byteOrder, buf: buf, firstField: j, lastField: i}
+			d := &decoder{order: p.byteOrder, buf: buf, firstField: firstFixedFieldIdx, lastField: fieldIdx}
 			d.value(val)
 		}
 
-		for ; i < nfields; i++ {
-			fieldval := val.Field(i)
-			fieldtyp := typ.Field(i)
+		for ; fieldIdx < nfields; fieldIdx++ {
+			fieldval := val.Field(fieldIdx)
+			fieldtyp := typ.Field(fieldIdx)
 
 			var padding uint32
 			offset := p.offset
@@ -121,8 +121,25 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 					if length > 0 {
 						slice := reflect.MakeSlice(fieldtyp.Type, length, length)
 						islice := slice.Interface()
-						/*p.EmitReadFixedFast(islice, length * int(fieldtyp.Type.Size()))*/
-						p.EmitReadFixed(islice)
+
+						size := binary.Size(islice)
+						if size < 0 {
+							// Varsize type, need to parse each element via recursive call
+							for i := 0; i < length; i++ {
+								elem := slice.Index(i)
+								tptr := reflect.PtrTo(fieldtyp.Type.Elem())
+								ptr := reflect.New(tptr)
+								ptr.Elem().Set(elem.Addr())
+
+								err := p.EmitReadStruct(ptr.Elem().Interface())
+								if err != nil {
+									return err
+								}
+							}
+						} else {
+							// Fast path for fixed-size element type
+							p.EmitReadFixed(islice)
+						}
 						fieldval.Set(slice)
 					}
 				} else {
@@ -141,7 +158,7 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 
 				err := p.EmitReadStruct(ptr.Elem().Interface())
 				if err != nil {
-					p.RaiseError(err)
+					return err
 				}
 			case reflect.Ptr:
 				/*if fieldval.IsNil() {*/
