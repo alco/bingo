@@ -1,3 +1,14 @@
+// Modified code from the std binary package.
+//
+// Original version:
+//
+//   http://golang.org/src/pkg/encoding/binary/binary.go
+//
+// Copyright 2009 The Go Authors.  All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+//
+
 package bingo
 
 import (
