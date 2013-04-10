@@ -170,18 +170,19 @@ var fixedSizeData = []byte{'B', 'I', 'N', 'G',
                            0xF2,
                            255,
                            0, 0, 1, 1, 2, 2, 3, 3}
+type FixedSizeStruct struct {
+    Signature [4]byte
+    Version   uint16
+    Reserved  [2]int16
+    NChans    int16
+    Height    int32
+    Width     int8
+    Depth     uint8
+    ColorMode int64
+}
 
 func TestFixedSizeStructLittle(t *testing.T) {
-    s := struct {
-        Signature [4]byte
-        Version   uint16
-        Reserved  [2]int16
-        NChans    int16
-        Height    int32
-        Width     int8
-        Depth     uint8
-        ColorMode int64
-    }{}
+    s := FixedSizeStruct{}
     p := newParserData(fixedSizeData)
 
     p.EmitReadStruct(&s)
@@ -211,6 +212,42 @@ func TestFixedSizeStructLittle(t *testing.T) {
         t.Error("Error parsing int64 (little):", s.ColorMode)
     }
     if p.offset != 26 {
-        t.Error("Invalid parser offset after fixed-size struct:", p.offset)
+        t.Error("Invalid parser offset after fixed-size struct (little):", p.offset)
+    }
+}
+
+func TestFixedSizeStructBig(t *testing.T) {
+    s := FixedSizeStruct{}
+    p := newParserData(fixedSizeData)
+    p.byteOrder = binary.BigEndian
+
+    p.EmitReadStruct(&s)
+
+    if string(s.Signature[:]) != "BING" {
+        t.Error("Error parsing fixed-size byte array (big):", s.Signature)
+    }
+    if s.Version != 0x7B00 {
+        t.Error("Error parsing uint16 (big):", s.Version)
+    }
+    if !(s.Reserved[0] == 0x302 && s.Reserved[1] == 0x16F) {
+        t.Error("Error parsing [2]int16 (big):", s.Reserved)
+    }
+    if s.NChans != 128 {
+        t.Error("Error parsing int16 (big):", s.NChans)
+    }
+    if s.Height != 0xD000102 {
+        t.Error("Error parsing int32 (big):", s.Height)
+    }
+    if s.Width != -14 {
+        t.Error("Error parsing int8 (big):", s.Width)
+    }
+    if s.Depth != 255 {
+        t.Error("Error parsing uint8 (big):", s.Depth)
+    }
+    if s.ColorMode != 0x0000010102020303 {
+        t.Error("Error parsing int64 (big):", s.ColorMode)
+    }
+    if p.offset != 26 {
+        t.Error("Invalid parser offset after fixed-size struct (big):", p.offset)
     }
 }
