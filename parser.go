@@ -60,11 +60,21 @@ func (p *Parser) EmitReadStruct(data interface{}) {
                 if len(lenkey) > 0 {
                     lenfield = val.FieldByName(lenkey)
 
-                    flength := int(lenfield.Interface().(uint16))
-                    slice := reflect.MakeSlice(fieldtyp.Type, flength, flength)
-                    ss := slice.Interface()//.([]byte)
-                    p.EmitReadFixedFast(ss, flength * int(fieldtyp.Type.Size()))
-                    /*p.EmitReadSliceByte(ss)*/
+                    var length int
+                    switch lenfield.Kind() {
+                    case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+                        length = int(lenfield.Int())
+                    case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+                        length = int(lenfield.Uint())
+                    default:
+                        p.RaiseError(errors.New("Unsupported type for length spec. Only integers are supported."))
+                    }
+
+                    slice := reflect.MakeSlice(fieldtyp.Type, length, length)
+                    islice := slice.Interface()
+                    /*p.EmitReadFixedFast(islice, length * int(fieldtyp.Type.Size()))*/
+                    p.EmitReadFixed(islice)
+
                     fieldval.Set(slice)
                 } else {
                     // Length for the slice not specified. Try parsing it as is.
