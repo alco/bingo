@@ -95,8 +95,6 @@ func (p *Parser) EmitReadStruct(data interface{}) {
 				ptr := reflect.New(tptr)
 				ptr.Elem().Set(fieldval.Addr())
 
-				fmt.Printf("Recursive read struct for %+v\n", ptr.Elem())
-
 				var padding uint32
 				offset := p.offset
 				padstr := fieldtyp.Tag.Get("pad")
