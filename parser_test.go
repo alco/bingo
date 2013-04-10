@@ -282,7 +282,7 @@ func TestCustomType(t *testing.T) {
 	}
 }
 
-func TestCustomTypePad(t *testing.T) {
+func TestCustomTypeEmbed(t *testing.T) {
 	data := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		4, 0,
 		'a', 'b', 'c', 'd'}
@@ -310,5 +310,66 @@ func TestCustomTypePad(t *testing.T) {
 	}
 	if p.offset != 10+2+4 {
 		t.Error("Invalid offset after custom type PascalString:", p.offset)
+	}
+}
+
+func TestCustomTypePad(t *testing.T) {
+	data := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		5, 0,
+		'a', 'b', 'c', 'd', 'e', 0}
+	type PascalStringEmbed struct {
+		Length uint16
+		Chars  []byte `len:"Length"`
+	}
+	type PascalString struct {
+		PascalStringEmbed `pad:"2"`
+	}
+	s := struct {
+		SomeData [10]byte
+		Name     PascalString
+	}{}
+
+	p := newParserData(data)
+
+	p.EmitReadStruct(&s)
+
+	if s.Name.Length != 5 {
+		t.Error("Error parsing nested fixed uint16:", s.Name.Length)
+	}
+	if string(s.Name.Chars) != "abcde" {
+		t.Error("Error parsing nested []byte:", s.Name.Chars)
+	}
+	if p.offset != 10+2+5+1 { // +1 byte for padding
+		t.Error("Invalid offset after custom padded type PascalString:", p.offset)
+	}
+}
+
+func TestCustomTypeZeroPad(t *testing.T) {
+	data := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0}
+	type PascalStringEmbed struct {
+		Length uint16
+		Chars  []byte `len:"Length"`
+	}
+	type PascalString struct {
+		PascalStringEmbed `pad:"2"`
+	}
+	s := struct {
+		SomeData [10]byte
+		Name     PascalString
+	}{}
+
+	p := newParserData(data)
+
+	p.EmitReadStruct(&s)
+
+	if s.Name.Length != 0 {
+		t.Error("Error parsing nested fixed uint16:", s.Name.Length)
+	}
+	if len(s.Name.Chars) != 0 {
+		t.Error("Error parsing nested []byte:", s.Name.Chars)
+	}
+	if p.offset != 10+2 {
+		t.Error("Invalid offset after custom padded type PascalString with length 0:", p.offset)
 	}
 }

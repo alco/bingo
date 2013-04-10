@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strconv"
 )
 
 type Parser struct {
@@ -93,7 +94,29 @@ func (p *Parser) EmitReadStruct(data interface{}) {
 				tptr := reflect.PtrTo(fieldval.Type())
 				ptr := reflect.New(tptr)
 				ptr.Elem().Set(fieldval.Addr())
+
+				fmt.Printf("Recursive read struct for %+v\n", ptr.Elem())
+
+				var padding uint32
+				offset := p.offset
+				padstr := fieldtyp.Tag.Get("pad")
+				if len(padstr) > 0 {
+					pad, err := strconv.ParseUint(padstr, 0, 8)
+					if err != nil {
+						p.RaiseError(err)
+					}
+					padding = uint32(pad)
+				}
+
 				p.EmitReadStruct(ptr.Elem().Interface())
+
+				if padding > 1 {
+					nbytesRead := p.offset - offset
+					mod := nbytesRead % padding
+					if mod != 0 {
+						p.EmitSkipNBytes(int(mod))
+					}
+				}
 			case reflect.Ptr:
 				/*if fieldval.IsNil() {*/
 				/*val := reflect.New(fieldval.Type().Elem())*/
@@ -166,6 +189,11 @@ func (p *Parser) EmitReadFull(buf []byte) {
 		p.RaiseError(err)
 	}
 	p.offset += uint32(nbytes)
+}
+
+func (p *Parser) EmitSkipNBytes(nbytes int) {
+	// FIXME: remove unbounded allocation
+	p.EmitReadNBytes(nbytes)
 }
 
 func (p *Parser) RaiseError(err error) {
