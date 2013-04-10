@@ -75,6 +75,7 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 			iface := val.Field(fieldIdx).Interface()
 			fieldSize := binary.Size(iface)
 			if fieldSize <= 0 {
+				// TODO: examine edge case with size == 0
 				break
 			}
 			pendingBytes += fieldSize
@@ -90,6 +91,12 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 		for ; fieldIdx < nfields; fieldIdx++ {
 			fieldval := val.Field(fieldIdx)
 			fieldtyp := typ.Field(fieldIdx)
+
+			if binary.Size(fieldval.Interface()) > 0 {
+				// TODO: examine edge case with size == 0
+				// Fixed-size field. Time to break out from this loop
+				break
+			}
 
 			var padding uint32
 			offset := p.offset

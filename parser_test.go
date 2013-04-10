@@ -285,14 +285,15 @@ func TestFixedSizeStructBig(t *testing.T) {
 	}
 }
 
+type UnicodeString struct {
+	Length uint32
+	Chars  []uint16 `len:"Length"`
+}
+
 func TestCustomType(t *testing.T) {
 	data := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		4, 0, 0, 0,
 		'a', 0, 'b', 0, 'c', 0, 'd', 0}
-	type UnicodeString struct {
-		Length uint32
-		Chars  []uint16 `len:"Length"`
-	}
 	s := struct {
 		SomeData [10]byte
 		Name     UnicodeString
@@ -536,49 +537,77 @@ func TestCustomSlice(t *testing.T) {
 	}
 }
 
+type DescriptorT struct {
+	ClassIDString UnicodeString
+	ClassID       [4]byte `if:"ClassIDString.Length==0"`
+}
+
+func TestOptionalField(t *testing.T) {
+	data := []byte{1, 0, 0, 0,
+				   'a', 0,
+				   'a', 'b', 'c', 'd'}
+	s := DescriptorT{}
+	p := newParserData(data)
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if !(s.ClassIDString.Length == 1 && s.ClassIDString.Chars[0] == 'a') {
+		t.Error("Error parsing UnicodeString (optional):", s.ClassIDString)
+	}
+	if !(s.ClassID[0] == 0 && s.ClassID[1] == 0 && s.ClassID[2] == 0 && s.ClassID[3] == 0) {
+		t.Error("Read too much data after UnicodeString (optional):", s.ClassID)
+	}
+	if p.offset != 6 {
+		t.Error("Invalid offset after UnicodeString (optional):", p.offset)
+	}
+}
+
+func TestOptionalFieldSecondChoice(t *testing.T) {
+	data := []byte{0, 0, 0, 0,
+				   'a', 'b', 'c', 'd'}
+	s := DescriptorT{}
+	p := newParserData(data)
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if !(s.ClassIDString.Length == 0 && len(s.ClassIDString.Chars) == 0) {
+		t.Error("Error parsing UnicodeString (second optional):", s.ClassIDString)
+	}
+	if !(s.ClassID[0] == 'a' && s.ClassID[1] == 'b' && s.ClassID[2] == 'c' && s.ClassID[3] == 'd') {
+		t.Error("Error parsing optional ClassID:", s.ClassID)
+	}
+	if p.offset != 8 {
+		t.Error("Invalid offset after second optional:", p.offset)
+	}
+}
+
 /* Next up */
 
 // Challenges:
-// * nested slice of structs (correct offset)
 // * nested anonymous varsize struct
 // * bool, string
-// * optional field (ClassIDString && ClassID)
 type SlicesHeader struct {
-	Version                  uint32 // == 6, 7, or 8
-	Top, Left, Bottom, Right uint32 // bounding rectangle for all of the slices
-	GroupName                string // name of group of slices: Unicode string
+	Top, Left, Bottom, Right byte
+	GroupName                UnicodeString
 	Count                    uint32 // number of slices to follow
-	Slices                   []SlicesResourceBlock
+	Slices                   []Block
 
-	SlicesHeaderCS
+	SlicesHeaderExtra
 }
 
-type SlicesHeaderCS struct {
-	DescriptorVersion uint32 // == 16 for Photoshop 6.0
-	Descriptor        DescriptorT
+type Block struct {
+	Name, URL, Meta                         UnicodeString
+	Alpha, Red, Green, Blue     byte
+
+	extra DescriptorT
 }
 
-type SlicesResourceBlock struct {
-	ID, GroupID, Origin          uint32
-	LayerID                      uint32 // associated Layer ID (only present if Origin == 1)
-	Name                         string // Unicode string
-	Type                         uint32
-	Left, Top, Right, Bottom     uint32
-	URL, Target, Message, AltTag string // Unicode string
-	isHTML                       bool   // cell text is HTML
-	CellText                     string // Unicode string
-	AlignHoriz                   uint32 // horizontal alignment
-	AlignVert                    uint32 // vertical alignment
-	Alpha, Red, Green, Blue      bool
-
-	// for Photoshop > 6.0
+type SlicesHeaderExtra struct {
 	DescriptorVersion uint32
 	Descriptor        DescriptorT
 }
 
-type DescriptorT struct {
-	Name          string  // Unicode string: name from classID
-	ClassIDString string  // "" if ClassIDLength == 0
-	ClassID       [4]byte // classID if ClassIDString  == ""
-	NItems        uint32
-}
