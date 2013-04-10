@@ -15,9 +15,24 @@ type Parser struct {
 	offset    uint32
 }
 
+
+type Verifier interface {
+	Verify() error
+}
+
+func (p *Parser) callVerify(data interface{}) {
+	if data, ok := data.(Verifier); ok {
+		err := data.Verify()
+		if err != nil {
+			p.RaiseError(err)
+		}
+	}
+}
+
 func (p *Parser) EmitReadStruct(data interface{}) {
 	// Try fast path for fixed-size data
 	if p.EmitReadFixed(data) {
+		p.callVerify(data)
 		return
 	}
 
@@ -156,6 +171,8 @@ func (p *Parser) EmitReadStruct(data interface{}) {
 			/*fmt.Printf("Read var-length field %v\n", field.Name)*/
 		}
 	}
+
+	p.callVerify(data)
 }
 
 func (p *Parser) EmitReadFixed(data interface{}) bool {

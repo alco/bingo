@@ -3,6 +3,7 @@ package bingo
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"testing"
 	"unicode/utf16"
 )
@@ -181,6 +182,14 @@ type FixedSizeStruct struct {
 	Width     int8
 	Depth     uint8
 	ColorMode int64
+}
+
+func (s *FixedSizeStruct) Verify() error {
+	if s.Signature[0] != '' {
+		return errors.New("verification failure")
+	}
+
+	return nil
 }
 
 func TestFixedSizeStructLittle(t *testing.T) {
