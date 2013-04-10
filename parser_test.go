@@ -278,6 +278,37 @@ func TestCustomType(t *testing.T) {
 		t.Error("Error parsing nested []uint16:", s.Name.Chars)
 	}
 	if p.offset != 10+4+4*2 {
-		t.Error("Invalid offset after custom type *UnicodeString:", p.offset)
+		t.Error("Invalid offset after custom type UnicodeString:", p.offset)
+	}
+}
+
+func TestCustomTypePad(t *testing.T) {
+	data := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		4, 0,
+		'a', 'b', 'c', 'd'}
+	type PascalStringEmbed struct {
+		Length uint16
+		Chars  []byte `len:"Length"`
+	}
+	type PascalString struct {
+		PascalStringEmbed
+	}
+	s := struct {
+		SomeData [10]byte
+		Name     PascalString
+	}{}
+
+	p := newParserData(data)
+
+	p.EmitReadStruct(&s)
+
+	if s.Name.Length != 4 {
+		t.Error("Error parsing nested fixed uint16:", s.Name.Length)
+	}
+	if string(s.Name.Chars) != "abcd" {
+		t.Error("Error parsing nested []byte:", s.Name.Chars)
+	}
+	if p.offset != 10+2+4 {
+		t.Error("Invalid offset after custom type PascalString:", p.offset)
 	}
 }
