@@ -286,12 +286,12 @@ func TestCustomTypeEmbed(t *testing.T) {
 	data := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		4, 0,
 		'a', 'b', 'c', 'd'}
-	type PascalStringEmbed struct {
+	type pascalStringEmbed struct {
 		Length uint16
 		Chars  []byte `len:"Length"`
 	}
 	type PascalString struct {
-		PascalStringEmbed
+		pascalStringEmbed
 	}
 	s := struct {
 		SomeData [10]byte
@@ -317,12 +317,12 @@ func TestCustomTypePad(t *testing.T) {
 	data := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		5, 0,
 		'a', 'b', 'c', 'd', 'e', 0}
-	type PascalStringEmbed struct {
+	type pascalStringEmbed struct {
 		Length uint16
 		Chars  []byte `len:"Length"`
 	}
 	type PascalString struct {
-		PascalStringEmbed `pad:"2"`
+		pascalStringEmbed `pad:"2"`
 	}
 	s := struct {
 		SomeData [10]byte
@@ -347,12 +347,12 @@ func TestCustomTypePad(t *testing.T) {
 func TestCustomTypeZeroPad(t *testing.T) {
 	data := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0}
-	type PascalStringEmbed struct {
+	type pascalStringEmbed struct {
 		Length uint16
 		Chars  []byte `len:"Length"`
 	}
 	type PascalString struct {
-		PascalStringEmbed `pad:"2"`
+		pascalStringEmbed `pad:"2"`
 	}
 	s := struct {
 		SomeData [10]byte
