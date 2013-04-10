@@ -284,10 +284,10 @@ func TestCustomType(t *testing.T) {
 
 func TestCustomTypeEmbed(t *testing.T) {
 	data := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		4, 0,
+		4,
 		'a', 'b', 'c', 'd'}
 	type pascalStringEmbed struct {
-		Length uint16
+		Length uint8
 		Chars  []byte `len:"Length"`
 	}
 	type PascalString struct {
@@ -303,22 +303,22 @@ func TestCustomTypeEmbed(t *testing.T) {
 	p.EmitReadStruct(&s)
 
 	if s.Name.Length != 4 {
-		t.Error("Error parsing nested fixed uint16:", s.Name.Length)
+		t.Error("Error parsing nested fixed uint8:", s.Name.Length)
 	}
 	if string(s.Name.Chars) != "abcd" {
 		t.Error("Error parsing nested []byte:", s.Name.Chars)
 	}
-	if p.offset != 10+2+4 {
+	if p.offset != 10+1+4 {
 		t.Error("Invalid offset after custom type PascalString:", p.offset)
 	}
 }
 
 func TestCustomTypePad(t *testing.T) {
 	data := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		5, 0,
-		'a', 'b', 'c', 'd', 'e', 0}
+		4,
+		'a', 'b', 'c', 'd', 0}
 	type pascalStringEmbed struct {
-		Length uint16
+		Length uint8
 		Chars  []byte `len:"Length"`
 	}
 	type PascalString struct {
@@ -333,13 +333,13 @@ func TestCustomTypePad(t *testing.T) {
 
 	p.EmitReadStruct(&s)
 
-	if s.Name.Length != 5 {
-		t.Error("Error parsing nested fixed uint16:", s.Name.Length)
+	if s.Name.Length != 4 {
+		t.Error("Error parsing nested fixed uint8:", s.Name.Length)
 	}
-	if string(s.Name.Chars) != "abcde" {
+	if string(s.Name.Chars) != "abcd" {
 		t.Error("Error parsing nested []byte:", s.Name.Chars)
 	}
-	if p.offset != 10+2+5+1 { // +1 byte for padding
+	if p.offset != 10+1+4+1 { // +1 byte for padding
 		t.Error("Invalid offset after custom padded type PascalString:", p.offset)
 	}
 }
@@ -348,7 +348,7 @@ func TestCustomTypeZeroPad(t *testing.T) {
 	data := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0}
 	type pascalStringEmbed struct {
-		Length uint16
+		Length uint8
 		Chars  []byte `len:"Length"`
 	}
 	type PascalString struct {
@@ -364,12 +364,52 @@ func TestCustomTypeZeroPad(t *testing.T) {
 	p.EmitReadStruct(&s)
 
 	if s.Name.Length != 0 {
-		t.Error("Error parsing nested fixed uint16:", s.Name.Length)
+		t.Error("Error parsing nested fixed uint8:", s.Name.Length)
 	}
 	if len(s.Name.Chars) != 0 {
 		t.Error("Error parsing nested []byte:", s.Name.Chars)
 	}
 	if p.offset != 10+2 {
 		t.Error("Invalid offset after custom padded type PascalString with length 0:", p.offset)
+	}
+}
+
+func TestPaddedSlice(t *testing.T) {
+	data := []byte{4, 'a', 'b', 'c', 'd', 0, 0}
+	s := struct {
+		DataLength uint8
+		Data       []byte `len:"DataLength" pad:"3"`
+	}{}
+	p := newParserData(data)
+
+	p.EmitReadStruct(&s)
+	if s.DataLength != 4 {
+		t.Error("Error parsing uint8 length:", s.DataLength)
+	}
+	if string(s.Data) != "abcd" {
+		t.Error("Error parsing []byte:", s.Data)
+	}
+	if p.offset != 1+4+2 { // +2 bytes for padding
+		t.Error("Invalid offset after padded []byte:", p.offset)
+	}
+}
+
+func TestPaddedSliceZero(t *testing.T) {
+	data := []byte{0, 0}
+	s := struct {
+		DataLength uint16
+		Data       []byte `len:"DataLength" pad:"2"`
+	}{}
+	p := newParserData(data)
+
+	p.EmitReadStruct(&s)
+	if s.DataLength != 0 {
+		t.Error("Error parsing uint16 length:", s.DataLength)
+	}
+	if len(s.Data) != 0 {
+		t.Error("Error parsing []byte:", s.Data)
+	}
+	if p.offset != 2 {
+		t.Error("Invalid offset after zero-length []byte:", p.offset)
 	}
 }

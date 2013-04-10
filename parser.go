@@ -58,12 +58,23 @@ func (p *Parser) EmitReadStruct(data interface{}) {
 		for ; i < nfields; i++ {
 			fieldval := val.Field(i)
 			fieldtyp := typ.Field(i)
+
+			var padding uint32
+			offset := p.offset
+			padstr := fieldtyp.Tag.Get("pad")
+			if len(padstr) > 0 {
+				pad, err := strconv.ParseUint(padstr, 0, 8)
+				if err != nil {
+					p.RaiseError(err)
+				}
+				padding = uint32(pad)
+			}
+
 			switch fieldval.Kind() {
 			case reflect.Slice:
 				lenkey := fieldtyp.Tag.Get("len")
-				var lenfield reflect.Value
 				if len(lenkey) > 0 {
-					lenfield = val.FieldByName(lenkey)
+					lenfield := val.FieldByName(lenkey)
 
 					var length int
 					switch lenfield.Kind() {
@@ -96,26 +107,7 @@ func (p *Parser) EmitReadStruct(data interface{}) {
 				ptr := reflect.New(tptr)
 				ptr.Elem().Set(fieldval.Addr())
 
-				var padding uint32
-				offset := p.offset
-				padstr := fieldtyp.Tag.Get("pad")
-				if len(padstr) > 0 {
-					pad, err := strconv.ParseUint(padstr, 0, 8)
-					if err != nil {
-						p.RaiseError(err)
-					}
-					padding = uint32(pad)
-				}
-
 				p.EmitReadStruct(ptr.Elem().Interface())
-
-				if padding > 1 {
-					nbytesRead := p.offset - offset
-					mod := nbytesRead % padding
-					if mod != 0 {
-						p.EmitSkipNBytes(int(mod))
-					}
-				}
 			case reflect.Ptr:
 				/*if fieldval.IsNil() {*/
 				/*val := reflect.New(fieldval.Type().Elem())*/
@@ -128,6 +120,14 @@ func (p *Parser) EmitReadStruct(data interface{}) {
 				/*fmt.Printf("%+v\n", fieldval.Elem().Kind())*/
 			default:
 				p.RaiseError(errors.New(fmt.Sprintf("Unhandled type %v", fieldval.Kind())))
+			}
+
+			if padding > 1 {
+				nbytesRead := p.offset - offset
+				mod := nbytesRead % padding
+				if mod != 0 {
+					p.EmitSkipNBytes(int(padding - mod))
+				}
 			}
 
 			/*// Inspect the field's tag to find out how to parse it*/
