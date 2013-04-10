@@ -413,3 +413,51 @@ func TestPaddedSliceZero(t *testing.T) {
 		t.Error("Invalid offset after zero-length []byte:", p.offset)
 	}
 }
+
+
+/* Next up */
+
+// Challenges:
+// * nested slice of structs (correct offset)
+// * nested anonymous varsize struct
+// * bool, string
+// * optional field (ClassIDString && ClassID)
+type SlicesHeader struct {
+	Version                  uint32 // == 6, 7, or 8
+	Top, Left, Bottom, Right uint32 // bounding rectangle for all of the slices
+	GroupName                string // name of group of slices: Unicode string
+	Count                    uint32 // number of slices to follow
+	Slices                   []SlicesResourceBlock
+
+	SlicesHeaderCS
+}
+
+type SlicesHeaderCS struct {
+	DescriptorVersion uint32 // == 16 for Photoshop 6.0
+	Descriptor        DescriptorT
+}
+
+type SlicesResourceBlock struct {
+	ID, GroupID, Origin          uint32
+	LayerID                      uint32 // associated Layer ID (only present if Origin == 1)
+	Name                         string // Unicode string
+	Type                         uint32
+	Left, Top, Right, Bottom     uint32
+	URL, Target, Message, AltTag string // Unicode string
+	isHTML                       bool   // cell text is HTML
+	CellText                     string // Unicode string
+	AlignHoriz                   uint32 // horizontal alignment
+	AlignVert                    uint32 // vertical alignment
+	Alpha, Red, Green, Blue      bool
+
+	// for Photoshop > 6.0
+	DescriptorVersion uint32
+	Descriptor        DescriptorT
+}
+
+type DescriptorT struct {
+	Name          string  // Unicode string: name from classID
+	ClassIDString string  // "" if ClassIDLength == 0
+	ClassID       [4]byte // classID if ClassIDString  == ""
+	NItems        uint32
+}
