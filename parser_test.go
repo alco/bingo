@@ -9,7 +9,11 @@ import (
 var someData = []byte{10, 0, 1, 0, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'}
 
 func newParser() *Parser {
-    return &Parser{bytes.NewReader(someData), binary.LittleEndian, 0}
+    return newParserData(someData)
+}
+
+func newParserData(data []byte) *Parser {
+    return &Parser{bytes.NewReader(data), binary.LittleEndian, 0}
 }
 
 func TestEmptyStruct(t *testing.T) {
@@ -136,6 +140,25 @@ func TestSliceByte(t *testing.T) {
     }
 
     if string(s.Data) != "\x01\x00abcdefgh" {
+        t.Error("Invalid data read into []byte:", s.Data)
+    }
+}
+
+func TestSliceInt(t *testing.T) {
+    data := []byte{4,0,0,0,1,0,2,0,3,0,4,0}
+    s := struct {
+        Length uint32
+        Data []uint16 `len:"Length"`
+    }{}
+    p := newParserData(data)
+
+    p.EmitReadStruct(&s)
+
+    if s.Length != 4 {
+        t.Error("Failed to read correct length for slice (uint32):", s.Length)
+    }
+
+    if uint32(len(s.Data)) != s.Length || !(s.Data[0] == 1 && s.Data[1] == 2 && s.Data[2] == 3 && s.Data[3] == 4) {
         t.Error("Invalid data read into []byte:", s.Data)
     }
 }
