@@ -1,4 +1,4 @@
-package goblin
+package bingo
 
 import (
     "testing"
