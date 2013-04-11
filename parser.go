@@ -16,7 +16,6 @@ type Parser struct {
 	offset    uint32
 }
 
-
 type Verifier interface {
 	Verify() error
 }
@@ -31,21 +30,21 @@ func (p *Parser) callVerify(data interface{}) error {
 
 func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 	/*defer func() {*/
-		/*if r := recover(); r != nil {*/
-			/*if _, ok := r.(runtime.Error); ok {*/
-				/*panic(r)*/
-			/*}*/
+	/*if r := recover(); r != nil {*/
+	/*if _, ok := r.(runtime.Error); ok {*/
+	/*panic(r)*/
+	/*}*/
 
-			/*switch x := r.(type) {*/
-			/*case error:*/
-				/*err = x*/
-			/*case string:*/
-				/*err = errors.New(x)*/
-			/*default:*/
-				/*// This should not be reachable unless there's a bug in the package*/
-				/*panic(r)*/
-			/*}*/
-		/*}*/
+	/*switch x := r.(type) {*/
+	/*case error:*/
+	/*err = x*/
+	/*case string:*/
+	/*err = errors.New(x)*/
+	/*default:*/
+	/*// This should not be reachable unless there's a bug in the package*/
+	/*panic(r)*/
+	/*}*/
+	/*}*/
 	/*}()*/
 
 	// Try fast path for fixed-size data

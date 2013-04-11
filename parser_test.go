@@ -468,8 +468,8 @@ func TestCustomSliceZero(t *testing.T) {
 	}
 	s := struct {
 		SomeData uint32
-		Count int8
-		Slice []VarStruct `len:"Count"`
+		Count    int8
+		Slice    []VarStruct `len:"Count"`
 	}{}
 	p := newParserData(data)
 
@@ -493,20 +493,20 @@ func TestCustomSliceZero(t *testing.T) {
 
 func TestCustomSlice(t *testing.T) {
 	data := []byte{0, 0, 0, 0, // SomeData
-				   3, // Count
-				   0, 0, // DataLength
-				   4, 0, // DataLength
-				   'a', 'b', 'c', 'd', // Data
-				   1, 0, // DataLength
-				   13} // Data
+		3,    // Count
+		0, 0, // DataLength
+		4, 0, // DataLength
+		'a', 'b', 'c', 'd', // Data
+		1, 0, // DataLength
+		13} // Data
 	type VarStruct struct {
 		DataLength uint16
 		Data       []byte `len:"DataLength"`
 	}
 	s := struct {
 		SomeData uint32
-		Count int8
-		Slice []VarStruct `len:"Count"`
+		Count    int8
+		Slice    []VarStruct `len:"Count"`
 	}{}
 	p := newParserData(data)
 
@@ -548,8 +548,8 @@ func (d *DescriptorT) ShouldParseClassID() bool {
 
 func TestOptionalField(t *testing.T) {
 	data := []byte{1, 0, 0, 0,
-				   'a', 0,
-				   'a', 'b', 'c', 'd'}
+		'a', 0,
+		'a', 'b', 'c', 'd'}
 	s := DescriptorT{}
 	p := newParserData(data)
 
@@ -570,7 +570,7 @@ func TestOptionalField(t *testing.T) {
 
 func TestOptionalFieldSecondChoice(t *testing.T) {
 	data := []byte{0, 0, 0, 0,
-				   'a', 'b', 'c', 'd'}
+		'a', 'b', 'c', 'd'}
 	s := DescriptorT{}
 	p := newParserData(data)
 
@@ -589,25 +589,20 @@ func TestOptionalFieldSecondChoice(t *testing.T) {
 	}
 }
 
-/* Next up */
-
-// Challenges:
-// * nested anonymous varsize struct
-// * bool, string
 type SlicesHeader struct {
 	Top, Left, Bottom, Right byte
 	GroupName                UnicodeString
-	Count                    uint32 // number of slices to follow
-	Slices                   []Block
+	Count                    uint32  // number of slices to follow
+	Slices                   []Block `len:"Count"`
 
 	SlicesHeaderExtra
 }
 
 type Block struct {
-	Name, URL, Meta                         UnicodeString
-	Alpha, Red, Green, Blue     byte
+	Name, URL, Meta         UnicodeString
+	Alpha, Red, Green, Blue byte
 
-	extra DescriptorT
+	DescriptorT
 }
 
 type SlicesHeaderExtra struct {
@@ -615,3 +610,73 @@ type SlicesHeaderExtra struct {
 	Descriptor        DescriptorT
 }
 
+/*
+type DescriptorT struct {
+	ClassIDString UnicodeString
+	ClassID       [4]byte `if:"ShouldParseClassID"`
+}
+*/
+
+func TestDoubleNestedStruct(t *testing.T) {
+	data := []byte{1, 2, 3, 4, // top, left, bottom, right
+		0, 0, 0, 0, // UnicodeString
+		2, 0, 0, 0, // Count
+
+		3, 0, 0, 0, // UnicodeString.Length
+		'a', 0, 1, 1, 'c', 0,
+		2, 0, 0, 0, // UnicodeString.Length
+		'a', 0, 'b', 0,
+		1, 0, 0, 0, // UnicodeString.Length
+		13, 12,
+		4, 3, 2, 1, // RGBA
+		1, 0, 0, 0,
+		'a', 0,
+
+		0, 0, 0, 0, // UnicodeString.Length
+		0, 0, 0, 0, // UnicodeString.Length
+		0, 0, 0, 0, // UnicodeString.Length
+		4, 3, 2, 1, // RGBA
+		0, 0, 0, 0,
+		'A', 'B', 'C', 'D',
+
+		1, 2, 3, 4, // DescriptorVersion
+		2, 0, 0, 0,
+		'a', 'b', 'c', 'd'}
+	s := SlicesHeader{}
+	p := newParserData(data)
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if !(s.Top == 1 && s.Left == 2 && s.Bottom == 3 && s.Right == 4) {
+		t.Error("Error parsing first row of bytes (nested):", s)
+	}
+	if !(s.GroupName.Length == 0 && len(s.GroupName.Chars) == 0) {
+		t.Error("Error parsing GroupName (nested):", s.GroupName)
+	}
+	if s.Count != 2 {
+		t.Error("Error parsing Count (nested):", s.Count)
+	}
+	if !(s.Slices[0].Name.Length == 3 && len(s.Slices[0].Name.Chars) == 3) {
+		t.Error("Error parsing first block's Name (nested):", s.Slices[0])
+	}
+	if !(s.Slices[0].URL.Length == 2 && len(s.Slices[0].URL.Chars) == 2) {
+		t.Error("Error parsing first block's URL (nested):", s.Slices[0])
+	}
+	if !(s.Slices[0].Meta.Length == 1 && len(s.Slices[0].Meta.Chars) == 1) {
+		t.Error("Error parsing first block's Meta (nested):", s.Slices[0])
+	}
+	if !(len(s.Slices[0].ClassIDString.Chars) == 1 && s.Slices[0].ClassIDString.Chars[0] == 'a') {
+		t.Error("Error parsing first block's ClassIDString (nested):", s.Slices[0])
+	}
+	// FIXME: unfinished checks
+	if p.offset != 82 {
+		t.Error("Invalid offset after double nested struct:", p.offset)
+	}
+}
+
+/* Next up */
+
+// Challenges:
+// * bool, string
