@@ -744,3 +744,4 @@ func TestReadUntilEOF(t *testing.T) {
 // Challenges:
 // * bool, string
 // * slice of pointers
+// * precise error reporting
