@@ -720,10 +720,27 @@ func TestUnkownLengthSlice(t *testing.T) {
 	}
 }
 
+func TestReadUntilEOF(t *testing.T) {
+	data := []byte("Hello world!")
+	s := struct {
+		Data []byte `len:"<inf>"`
+	}{}
+	p := newParserData(data)
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if string(s.Data) != "Hello world!" {
+		t.Error("Error reading until EOF into []byte:", s.Data)
+	}
+	if p.offset != uint32(len(data)) {
+		t.Error("Invalid offset after reading until EOF into []byte:", p.offset)
+	}
+}
+
 /* Next up */
 
 // Challenges:
 // * bool, string
-// * read until EOF
-// * read UNKNOWN elements into slice until read N bytes
 // * slice of pointers
