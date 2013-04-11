@@ -692,3 +692,5 @@ func TestDoubleNestedStruct(t *testing.T) {
 
 // Challenges:
 // * bool, string
+// * read until EOF
+// * read UNKNOWN elements into slice until read N bytes
