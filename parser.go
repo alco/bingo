@@ -16,6 +16,10 @@ type Parser struct {
 	offset    uint32
 }
 
+func NewParser(r io.Reader, order binary.ByteOrder) *Parser {
+	return &Parser{r, order, 0}
+}
+
 type Verifier interface {
 	Verify() error
 }
@@ -64,8 +68,8 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 	fieldIdx := 0
 	nfields := typ.NumField()
 	for fieldIdx < nfields {
-		pendingBytes := 0
-		firstFixedFieldIdx := fieldIdx
+		/*pendingBytes := 0*/
+		/*firstFixedFieldIdx := fieldIdx*/
 		for ; fieldIdx < nfields; fieldIdx++ {
 			// check for read condition
 			fieldtyp := typ.Field(fieldIdx)
@@ -82,35 +86,35 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 				}
 			}
 
+			/*fieldval := val.Field(fieldIdx)*/
+			/*if fieldval.Kind() == reflect.Ptr && fieldval.IsNil() {*/
+				/*break*/
+			/*}*/
+			/*iface := val.Field(fieldIdx).Interface()*/
+			/*fieldSize := binary.Size(iface)*/
+			/*if fieldSize <= 0 {*/
+				/*// TODO: examine edge case with size == 0*/
+				/*break*/
+			/*}*/
+			/*pendingBytes += fieldSize*/
+		/*}*/
+
+		/*// We can now read `pendingBytes` bytes before proceeding*/
+		/*if pendingBytes > 0 {*/
+			/*buf := p.EmitReadNBytes(pendingBytes)*/
+			/*d := &decoder{order: p.byteOrder, buf: buf, firstField: firstFixedFieldIdx, lastField: fieldIdx}*/
+			/*d.value(val)*/
+		/*}*/
+
+		/*for ; fieldIdx < nfields; fieldIdx++ {*/
 			fieldval := val.Field(fieldIdx)
-			if fieldval.Kind() == reflect.Ptr && fieldval.IsNil() {
-				break
-			}
-			iface := val.Field(fieldIdx).Interface()
-			fieldSize := binary.Size(iface)
-			if fieldSize <= 0 {
-				// TODO: examine edge case with size == 0
-				break
-			}
-			pendingBytes += fieldSize
-		}
+			/*fieldtyp := typ.Field(fieldIdx)*/
 
-		// We can now read `pendingBytes` bytes before proceeding
-		if pendingBytes > 0 {
-			buf := p.EmitReadNBytes(pendingBytes)
-			d := &decoder{order: p.byteOrder, buf: buf, firstField: firstFixedFieldIdx, lastField: fieldIdx}
-			d.value(val)
-		}
-
-		for ; fieldIdx < nfields; fieldIdx++ {
-			fieldval := val.Field(fieldIdx)
-			fieldtyp := typ.Field(fieldIdx)
-
-			if binary.Size(fieldval.Interface()) > 0 {
-				// TODO: examine edge case with size == 0
-				// Fixed-size field. Time to break out from this loop
-				break
-			}
+			/*if binary.Size(fieldval.Interface()) > 0 {*/
+				/*// TODO: examine edge case with size == 0*/
+				/*// Fixed-size field. Time to break out from this loop*/
+				/*break*/
+			/*}*/
 
 			var padding uint32
 			offset := p.offset
@@ -192,7 +196,14 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 				/*fmt.Printf("%+v\n", fieldval.Elem())*/
 				/*fmt.Printf("%+v\n", fieldval.Elem().Kind())*/
 			default:
-				p.RaiseError(errors.New(fmt.Sprintf("Unhandled type %v", fieldval.Kind())))
+				// Try to read as fixed data
+				tptr := reflect.PtrTo(fieldval.Type())
+				ptr := reflect.New(tptr)
+				ptr.Elem().Set(fieldval.Addr())
+
+				if !p.EmitReadFixed(ptr.Elem().Interface()) {
+					p.RaiseError(errors.New(fmt.Sprintf("Unhandled type %v", fieldval.Kind())))
+				}
 			}
 
 			if padding > 1 {
