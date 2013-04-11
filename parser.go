@@ -86,6 +86,16 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 				}
 			}
 
+			// TODO: actually do bulk reading of fixed-size fields,
+			// then iterate over them to see if any of them needs verification
+			//
+			// If a field depends on the previous field passing verification,
+			// user should add an `if` tag
+			//
+			// Bulk reading will be removed eventually, because encoding/binary
+			// runs its own loop over struct fields and doesn't actually read
+			// them as one unit
+
 			/*fieldval := val.Field(fieldIdx)*/
 			/*if fieldval.Kind() == reflect.Ptr && fieldval.IsNil() {*/
 				/*break*/
