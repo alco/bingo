@@ -62,10 +62,10 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 		p.context = data
 	}
 
-	// Try fast path for fixed-size data
-	if p.EmitReadFixed(data) {
-		return p.callVerify(data)
-	}
+	/*// Try fast path for fixed-size data*/
+	/*if p.EmitReadFixed(data) {*/
+		/*return p.callVerify(data)*/
+	/*}*/
 
 	// Start reflecting
 	ptrtyp := reflect.TypeOf(data)
@@ -86,12 +86,17 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 			fieldtyp := typ.Field(fieldIdx)
 			ifstr := fieldtyp.Tag.Get("if")
 			if len(ifstr) > 0 {
+				negate := false
+				if ifstr[0] == '!' {
+					negate = true
+					ifstr = ifstr[1:]
+				}
 				meth, ok := ptrtyp.MethodByName(ifstr)
 				if ok {
 					// TODO: check method signature
 					ctxval := reflect.ValueOf(p.context)
 					result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0].Interface().(bool)
-					if !result {
+					if negate == result {
 						// Skip this field
 						continue
 					}

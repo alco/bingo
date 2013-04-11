@@ -583,6 +583,53 @@ func TestOptionalField(t *testing.T) {
 	}
 }
 
+var negationFlag bool
+
+type Lengthy struct {
+	ShortLength int8 `if:"UseShortLength"`
+	LongLength int32 `if:"!UseShortLength"`
+}
+
+func (l *Lengthy) UseShortLength(context interface{}) bool {
+	return negationFlag
+}
+
+func TestOptionalFieldWithNegation(t *testing.T) {
+	data := []byte{1, 2, 3, 4}
+	s := Lengthy{}
+	p := newParserData(data)
+
+	negationFlag = false
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if !(s.ShortLength == 0 && s.LongLength == 0x04030201) {
+		t.Error("Error using negative condition:", s)
+	}
+	if p.offset != 4 {
+		t.Error("Invalid offset after negative condition:", p.offset)
+	}
+}
+
+func TestOptionalFieldWithNegation2(t *testing.T) {
+	data := []byte{17}
+	s := Lengthy{}
+	p := newParserData(data)
+
+	negationFlag = true
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if !(s.ShortLength == 17 && s.LongLength == 0) {
+		t.Error("Error using negative condition 2:", s)
+	}
+	if p.offset != 1 {
+		t.Error("Invalid offset after negative condition 2:", p.offset)
+	}
+}
+
 func TestOptionalFieldSecondChoice(t *testing.T) {
 	data := []byte{0, 0, 0, 0,
 		'a', 'b', 'c', 'd'}
@@ -748,3 +795,4 @@ func TestReadUntilEOF(t *testing.T) {
 // * bool, string
 // * slice of pointers
 // * precise error reporting
+// * make sure Verify methods are called reliably
