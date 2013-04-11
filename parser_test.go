@@ -583,23 +583,22 @@ func TestOptionalField(t *testing.T) {
 	}
 }
 
-var negationFlag bool
-
 type Lengthy struct {
 	ShortLength int8 `if:"UseShortLength"`
 	LongLength int32 `if:"!UseShortLength"`
+	pred func() bool
 }
 
 func (l *Lengthy) UseShortLength(context interface{}) bool {
-	return negationFlag
+	return l.pred()
 }
 
 func TestOptionalFieldWithNegation(t *testing.T) {
 	data := []byte{1, 2, 3, 4}
 	s := Lengthy{}
+	s.pred = func() bool { return false }
 	p := newParserData(data)
 
-	negationFlag = false
 	if err := p.EmitReadStruct(&s); err != nil {
 		t.Error(err)
 	}
@@ -615,9 +614,9 @@ func TestOptionalFieldWithNegation(t *testing.T) {
 func TestOptionalFieldWithNegation2(t *testing.T) {
 	data := []byte{17}
 	s := Lengthy{}
+	s.pred = func() bool { return true }
 	p := newParserData(data)
 
-	negationFlag = true
 	if err := p.EmitReadStruct(&s); err != nil {
 		t.Error(err)
 	}

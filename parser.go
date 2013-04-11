@@ -208,6 +208,7 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 					// Length for the slice not specified. Try parsing it as is.
 					p.EmitReadFixed(fieldval.Interface())
 				}
+
 			case reflect.Struct:
 				if !fieldval.CanAddr() {
 					p.RaiseError(errors.New("Value cannot Addr()"))
@@ -222,6 +223,7 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 				if err != nil {
 					return err
 				}
+
 			case reflect.Ptr:
 				/*if fieldval.IsNil() {*/
 				/*val := reflect.New(fieldval.Type().Elem())*/
@@ -232,6 +234,10 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 				/*fmt.Printf("%+v\n", fieldval.Type())*/
 				/*fmt.Printf("%+v\n", fieldval.Elem())*/
 				/*fmt.Printf("%+v\n", fieldval.Elem().Kind())*/
+
+			case reflect.Func:
+				// Ignore functions
+
 			default:
 				// Try to read as fixed data
 				tptr := reflect.PtrTo(fieldval.Type())
