@@ -140,19 +140,11 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 			switch fieldval.Kind() {
 			case reflect.Slice:
 				lenkey := fieldtyp.Tag.Get("len")
+				sizekey := fieldtyp.Tag.Get("size")
 				if len(lenkey) > 0 {
 					lenfield := val.FieldByName(lenkey)
 
-					var length int
-					switch lenfield.Kind() {
-					case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-						length = int(lenfield.Int())
-					case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-						length = int(lenfield.Uint())
-					default:
-						p.RaiseError(errors.New("Unsupported type for length spec. Only integers are supported."))
-					}
-
+					length := p.extractInt(lenfield)
 					if length > 0 {
 						slice := reflect.MakeSlice(fieldtyp.Type, length, length)
 						islice := slice.Interface()
@@ -177,6 +169,24 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 						}
 						fieldval.Set(slice)
 					}
+				} else if len(sizekey) > 0 {
+					sizefield := val.FieldByName(sizekey)
+					size := p.extractUint(sizefield)
+					sliceval := fieldval
+					for bytesRead := uint(0); bytesRead < size; bytesRead++ {
+						offset := p.offset
+						elemptr := reflect.New(fieldtyp.Type.Elem())
+
+						err := p.EmitReadStruct(elemptr.Interface())
+						if err != nil {
+							return err
+						}
+						sliceval = reflect.Append(sliceval, elemptr.Elem())
+
+						bytesRead += uint(p.offset - offset)
+					}
+					// Assign the newly allocated slice to the original field
+					fieldval.Set(sliceval)
 				} else {
 					// Length for the slice not specified. Try parsing it as is.
 					p.EmitReadFixed(fieldval.Interface())
@@ -293,4 +303,28 @@ func (p *Parser) EmitSkipNBytes(nbytes int) {
 
 func (p *Parser) RaiseError(err error) {
 	panic(err)
+}
+
+func (p *Parser) extractInt(val reflect.Value) int {
+	switch val.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int(val.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return int(val.Uint())
+	default:
+		p.RaiseError(errors.New("Unsupported type for length spec. Only integers are supported."))
+	}
+	return 0
+}
+
+func (p *Parser) extractUint(val reflect.Value) uint {
+	switch val.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return uint(val.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return uint(val.Uint())
+	default:
+		p.RaiseError(errors.New("Unsupported type for size spec. Only integers are supported."))
+	}
+	return 0
 }

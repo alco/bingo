@@ -688,9 +688,42 @@ func TestDoubleNestedStruct(t *testing.T) {
 	}
 }
 
+func TestUnkownLengthSlice(t *testing.T) {
+	data := []byte{10,
+				   0, 0, 0, 0,
+				   1, 0, 0, 0,
+				   'a', 0}
+	s := struct {
+		Size int8
+		Elems []UnicodeString `size:"Size"`
+	}{}
+	p := newParserData(data)
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if s.Size != 10 {
+		t.Error("Error parsing int8:", s.Size)
+	}
+	if len(s.Elems) != 2 {
+		t.Error("Error determining correct number of elements to parse:", s.Elems)
+	}
+	if s.Elems[0].Length != 0 {
+		t.Error("Error parsing the first element: empty UnicodeString:", s.Elems[0])
+	}
+	if !(s.Elems[1].Length == 1 && len(s.Elems[1].Chars) == 1 && s.Elems[1].Chars[0] == 'a') {
+		t.Error("Error parsing second elements -- 'a' UnicodeString:", s.Elems[1])
+	}
+	if p.offset != 11 {
+		t.Error("Invalid offset after unknown length slice:", p.offset)
+	}
+}
+
 /* Next up */
 
 // Challenges:
 // * bool, string
 // * read until EOF
 // * read UNKNOWN elements into slice until read N bytes
+// * slice of pointers
