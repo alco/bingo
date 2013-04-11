@@ -15,7 +15,7 @@ func newParser() *Parser {
 }
 
 func newParserData(data []byte) *Parser {
-	return &Parser{bytes.NewReader(data), binary.LittleEndian, 0}
+	return NewParser(bytes.NewReader(data), binary.LittleEndian)
 }
 
 func isEqualu16(a []uint16, b []uint16) bool {
@@ -214,10 +214,13 @@ type FixedSizeStruct struct {
 	ColorMode int64
 }
 
-func (s *FixedSizeStruct) Verify() error {
+func (s *FixedSizeStruct) Verify(context interface{}) error {
 	if s.Signature[0] != 'B' {
 		return errors.New("verification failure")
 	}
+
+	ctx := context.(*FixedSizeStruct)
+	ctx.Version++
 
 	return nil
 }
@@ -233,8 +236,8 @@ func TestFixedSizeStructLittle(t *testing.T) {
 	if string(s.Signature[:]) != "BING" {
 		t.Error("Error parsing fixed-size byte array (little):", s.Signature)
 	}
-	if s.Version != 123 {
-		t.Error("Error parsing uint16 (little):", s.Version)
+	if s.Version != 124 {
+		t.Error("Error verifying the version (little):", s.Version)
 	}
 	if !(s.Reserved[0] == 0x203 && s.Reserved[1] == 0x6F01) {
 		t.Error("Error parsing [2]int16 (little):", s.Reserved)
@@ -271,8 +274,8 @@ func TestFixedSizeStructBig(t *testing.T) {
 	if string(s.Signature[:]) != "BING" {
 		t.Error("Error parsing fixed-size byte array (big):", s.Signature)
 	}
-	if s.Version != 0x7B00 {
-		t.Error("Error parsing uint16 (big):", s.Version)
+	if s.Version != 0x7B01 {
+		t.Error("Error verifying the version (big):", s.Version)
 	}
 	if !(s.Reserved[0] == 0x302 && s.Reserved[1] == 0x16F) {
 		t.Error("Error parsing [2]int16 (big):", s.Reserved)
@@ -554,7 +557,7 @@ type DescriptorT struct {
 	ClassID       [4]byte `if:"ShouldParseClassID"`
 }
 
-func (d *DescriptorT) ShouldParseClassID() bool {
+func (d *DescriptorT) ShouldParseClassID(context interface{}) bool {
 	return d.ClassIDString.Length == 0
 }
 

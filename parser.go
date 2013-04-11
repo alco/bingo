@@ -15,6 +15,7 @@ type Parser struct {
 	r         io.Reader
 	byteOrder binary.ByteOrder
 	offset    uint32
+	context   interface{}
 }
 
 func (p *Parser) Offset() uint {
@@ -22,16 +23,16 @@ func (p *Parser) Offset() uint {
 }
 
 func NewParser(r io.Reader, order binary.ByteOrder) *Parser {
-	return &Parser{r, order, 0}
+	return &Parser{r, order, 0, nil}
 }
 
 type Verifier interface {
-	Verify() error
+	Verify(context interface{}) error
 }
 
 func (p *Parser) callVerify(data interface{}) error {
 	if data, ok := data.(Verifier); ok {
-		err := data.Verify()
+		err := data.Verify(p.context)
 		return err
 	}
 	return nil
@@ -55,6 +56,11 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 	/*}*/
 	/*}*/
 	/*}()*/
+
+	// Assign the context on the first (non-recursive) call
+	if p.context == nil {
+		p.context = data
+	}
 
 	// Try fast path for fixed-size data
 	if p.EmitReadFixed(data) {
@@ -83,7 +89,8 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 				meth, ok := ptrtyp.MethodByName(ifstr)
 				if ok {
 					// TODO: check method signature
-					result := meth.Func.Call([]reflect.Value{ptrval})[0].Interface().(bool)
+					ctxval := reflect.ValueOf(p.context)
+					result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0].Interface().(bool)
 					if !result {
 						// Skip this field
 						continue
