@@ -1,6 +1,7 @@
 package bingo
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -14,6 +15,10 @@ type Parser struct {
 	r         io.Reader
 	byteOrder binary.ByteOrder
 	offset    uint32
+}
+
+func (p *Parser) Offset() uint {
+	return uint(p.offset)
 }
 
 func NewParser(r io.Reader, order binary.ByteOrder) *Parser {
@@ -139,54 +144,54 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 
 			switch fieldval.Kind() {
 			case reflect.Slice:
-				lenkey := fieldtyp.Tag.Get("len")
-				sizekey := fieldtyp.Tag.Get("size")
-				if len(lenkey) > 0 {
-					lenfield := val.FieldByName(lenkey)
+				if lenkey := fieldtyp.Tag.Get("len"); len(lenkey) > 0 {
+					if lenkey == "<inf>" {
+						// read until EOF
+						buf := p.EmitReadAll()
+						if len(buf) > 0 {
+							p.readSliceFromBytes(fieldval, fieldtyp.Type, buf)
+						}
+					} else {
+						lenfield := val.FieldByName(lenkey)
+						length := p.extractInt(lenfield)
+						if length > 0 {
+							slice := reflect.MakeSlice(fieldtyp.Type, length, length)
+							islice := slice.Interface()
 
-					length := p.extractInt(lenfield)
-					if length > 0 {
-						slice := reflect.MakeSlice(fieldtyp.Type, length, length)
-						islice := slice.Interface()
+							size := binary.Size(islice)
+							if size < 0 {
+								// Varsize type, need to parse each element via recursive call
+								for i := 0; i < length; i++ {
+									elem := slice.Index(i)
+									tptr := reflect.PtrTo(fieldtyp.Type.Elem())
+									ptr := reflect.New(tptr)
+									ptr.Elem().Set(elem.Addr())
 
-						size := binary.Size(islice)
-						if size < 0 {
-							// Varsize type, need to parse each element via recursive call
-							for i := 0; i < length; i++ {
-								elem := slice.Index(i)
-								tptr := reflect.PtrTo(fieldtyp.Type.Elem())
-								ptr := reflect.New(tptr)
-								ptr.Elem().Set(elem.Addr())
-
-								err := p.EmitReadStruct(ptr.Elem().Interface())
-								if err != nil {
-									return err
+									err := p.EmitReadStruct(ptr.Elem().Interface())
+									if err != nil {
+										return err
+									}
 								}
+							} else {
+								// Fast path for fixed-size element type
+								p.EmitReadFixed(islice)
 							}
-						} else {
-							// Fast path for fixed-size element type
-							p.EmitReadFixed(islice)
+							fieldval.Set(slice)
 						}
-						fieldval.Set(slice)
 					}
-				} else if len(sizekey) > 0 {
-					sizefield := val.FieldByName(sizekey)
-					size := p.extractUint(sizefield)
-					sliceval := fieldval
-					for bytesRead := uint(0); bytesRead < size; bytesRead++ {
-						offset := p.offset
-						elemptr := reflect.New(fieldtyp.Type.Elem())
-
-						err := p.EmitReadStruct(elemptr.Interface())
-						if err != nil {
-							return err
-						}
-						sliceval = reflect.Append(sliceval, elemptr.Elem())
-
-						bytesRead += uint(p.offset - offset)
+				} else if sizekey := fieldtyp.Tag.Get("size"); len(sizekey) > 0 {
+					var buf []byte
+					if sizekey == "<inf>" {
+						// read until EOF
+						buf = p.EmitReadAll()
+					} else {
+						sizefield := val.FieldByName(sizekey)
+						size := p.extractInt(sizefield)
+						buf = p.EmitReadNBytes(size)
 					}
-					// Assign the newly allocated slice to the original field
-					fieldval.Set(sliceval)
+					if len(buf) > 0 {
+						p.readSliceFromBytes(fieldval, fieldtyp.Type, buf)
+					}
 				} else {
 					// Length for the slice not specified. Try parsing it as is.
 					p.EmitReadFixed(fieldval.Interface())
@@ -277,7 +282,8 @@ func (p *Parser) EmitReadFixed(data interface{}) bool {
 func (p *Parser) EmitReadFixedFast(data interface{}, size int) {
 	err := binary.Read(p.r, p.byteOrder, data)
 	if err != nil {
-		p.RaiseError(err)
+		/*p.RaiseError(err)*/
+		p.RaiseError(errors.New(fmt.Sprintf("%v while reading of size %v", err, size)))
 	}
 	p.offset += uint32(size)
 }
@@ -296,9 +302,50 @@ func (p *Parser) EmitReadFull(buf []byte) {
 	p.offset += uint32(nbytes)
 }
 
+func (p *Parser) EmitReadAll() []byte {
+	var buf bytes.Buffer
+	nbytes, err := buf.ReadFrom(p.r)
+	if err != nil {
+		p.RaiseError(err)
+	}
+	p.offset += uint32(nbytes)
+	return buf.Bytes()
+}
+
 func (p *Parser) EmitSkipNBytes(nbytes int) {
 	// FIXME: remove unbounded allocation
 	p.EmitReadNBytes(nbytes)
+}
+
+func (p *Parser) readSliceFromBytes(val reflect.Value, typ reflect.Type, buf []byte) {
+	// Fast path for []byte
+	if _, ok := val.Interface().([]byte); ok {
+		val.Set(reflect.ValueOf(buf))
+		return
+	}
+
+	// Create a temporary reader just for this function
+	tmp_reader, tmp_offset := p.r, p.offset
+	p.r = bytes.NewReader(buf)
+	size := uint(len(buf))
+	sliceval := val
+	for bytesRead := uint(0); bytesRead < size; bytesRead++ {
+		offset := p.offset
+		elemptr := reflect.New(typ.Elem())
+
+		err := p.EmitReadStruct(elemptr.Interface())
+		if err != nil {
+			p.RaiseError(err)
+		}
+		sliceval = reflect.Append(sliceval, elemptr.Elem())
+
+		bytesRead += uint(p.offset - offset)
+	}
+	// Assign the newly allocated slice to the original field
+	val.Set(sliceval)
+
+	// Restore parser's state
+	p.r, p.offset = tmp_reader, tmp_offset
 }
 
 func (p *Parser) RaiseError(err error) {
