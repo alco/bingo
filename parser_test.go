@@ -18,6 +18,18 @@ func newParserData(data []byte) *Parser {
 	return &Parser{bytes.NewReader(data), binary.LittleEndian, 0}
 }
 
+func isEqualu16(a []uint16, b []uint16) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestEmptyStruct(t *testing.T) {
 	empty := struct{}{}
 	p := newParser()
@@ -174,10 +186,10 @@ func TestSliceInt(t *testing.T) {
 	if s.Length != 4 {
 		t.Error("Failed to read correct length for slice (uint32):", s.Length)
 	}
-	if uint32(len(s.Data)) != s.Length || !(s.Data[0] == 1 && s.Data[1] == 2 && s.Data[2] == 3 && s.Data[3] == 4) {
+	if !(uint32(len(s.Data)) == s.Length && isEqualu16(s.Data, []uint16{1,2,3,4})) {
 		t.Error("Invalid data read into []byte:", s.Data)
 	}
-	if p.offset != 4+4*2 {
+	if p.offset != uint32(len(data)) {
 		t.Error("Invalid parser offset after parsing int slice:", p.offset)
 	}
 }
