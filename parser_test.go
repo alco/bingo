@@ -186,7 +186,7 @@ func TestSliceInt(t *testing.T) {
 	if s.Length != 4 {
 		t.Error("Failed to read correct length for slice (uint32):", s.Length)
 	}
-	if !(uint32(len(s.Data)) == s.Length && isEqualu16(s.Data, []uint16{1,2,3,4})) {
+	if !(uint32(len(s.Data)) == s.Length && isEqualu16(s.Data, []uint16{1, 2, 3, 4})) {
 		t.Error("Invalid data read into []byte:", s.Data)
 	}
 	if p.offset != uint32(len(data)) {
@@ -584,9 +584,9 @@ func TestOptionalField(t *testing.T) {
 }
 
 type Lengthy struct {
-	ShortLength int8 `if:"UseShortLength"`
-	LongLength int32 `if:"!UseShortLength"`
-	pred func() bool
+	ShortLength int8  `if:"UseShortLength"`
+	LongLength  int32 `if:"!UseShortLength"`
+	pred        func() bool
 }
 
 func (l *Lengthy) UseShortLength(context interface{}) bool {
@@ -739,11 +739,11 @@ func TestDoubleNestedStruct(t *testing.T) {
 
 func TestUnkownLengthSlice(t *testing.T) {
 	data := []byte{10,
-				   0, 0, 0, 0,
-				   1, 0, 0, 0,
-				   'a', 0}
+		0, 0, 0, 0,
+		1, 0, 0, 0,
+		'a', 0}
 	s := struct {
-		Size int8
+		Size  int8
 		Elems []UnicodeString `size:"Size"`
 	}{}
 	p := newParserData(data)
