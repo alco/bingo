@@ -327,9 +327,11 @@ func (p *Parser) readSliceFromBytes(val reflect.Value, typ reflect.Type, buf []b
 	// Create a temporary reader just for this function
 	tmp_reader, tmp_offset := p.r, p.offset
 	p.r = bytes.NewReader(buf)
+
 	size := uint(len(buf))
 	sliceval := val
-	for bytesRead := uint(0); bytesRead < size; bytesRead++ {
+	bytesRead := uint(0)
+	for bytesRead < size {
 		offset := p.offset
 		elemptr := reflect.New(typ.Elem())
 
@@ -340,6 +342,9 @@ func (p *Parser) readSliceFromBytes(val reflect.Value, typ reflect.Type, buf []b
 		sliceval = reflect.Append(sliceval, elemptr.Elem())
 
 		bytesRead += uint(p.offset - offset)
+	}
+	if bytesRead != size {
+		p.RaiseError(errors.New("Consistency error: mismatch between block size and total size of elements contained in it"))
 	}
 	// Assign the newly allocated slice to the original field
 	val.Set(sliceval)
