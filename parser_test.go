@@ -214,12 +214,12 @@ type FixedSizeStruct struct {
 	ColorMode int64
 }
 
-func (s *FixedSizeStruct) Verify(context interface{}) error {
+func (s *FixedSizeStruct) Verify(p *Parser) error {
 	if s.Signature[0] != 'B' {
 		return errors.New("verification failure")
 	}
 
-	ctx := context.(*FixedSizeStruct)
+	ctx := p.Context().(*FixedSizeStruct)
 	ctx.Version++
 
 	return nil
@@ -557,7 +557,7 @@ type DescriptorT struct {
 	ClassID       [4]byte `if:"ShouldParseClassID"`
 }
 
-func (d *DescriptorT) ShouldParseClassID(context interface{}) bool {
+func (d *DescriptorT) ShouldParseClassID(p *Parser) bool {
 	return d.ClassIDString.Length == 0
 }
 
@@ -589,7 +589,7 @@ type Lengthy struct {
 	pred        func() bool
 }
 
-func (l *Lengthy) UseShortLength(context interface{}) bool {
+func (l *Lengthy) UseShortLength(p *Parser) bool {
 	return l.pred()
 }
 
@@ -788,10 +788,56 @@ func TestReadUntilEOF(t *testing.T) {
 	}
 }
 
+type WrongVerifier struct {
+	dummy uint32
+}
+
+func (w *WrongVerifier) Verify() {
+}
+
+func TestVerifyDetect(t *testing.T) {
+	s := WrongVerifier{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if _, ok := err.(interface{Error() string}); !ok {
+			t.Error(err)
+		}
+	} else {
+		t.Error("Didn't fail on wrong Verify() method")
+	}
+
+	if p.offset != 0 {
+		t.Error("Invalid offset after parsing wrong verifier", p.offset)
+	}
+}
+
+func TestStrictMode(t *testing.T) {
+	s := WrongVerifier{}
+	p := newParser()
+	p.Strict = true
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if _, ok := err.(*Error); !ok {
+			t.Error(err)
+		}
+	} else {
+		t.Error("Didn't fail on unexported field")
+	}
+
+	if p.offset != 0 {
+		t.Error("Invalid offset after parsing unexported field", p.offset)
+	}
+}
+
+func TestPanickyMode(t *testing.T) {
+	defer func() {
+	}()
+}
+
 /* Next up */
 
 // Challenges:
 // * bool, string
 // * slice of pointers
 // * precise error reporting
-// * make sure Verify methods are called reliably

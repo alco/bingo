@@ -7,55 +7,85 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	/*"runtime"*/
+	"runtime"
 	"strconv"
 )
 
+type Error struct {
+	Text string
+}
+
+func (err *Error) Error() string {
+	return err.Text
+}
+
 type Parser struct {
+	Strict    bool
+	Panicky   bool
+	Tags map[string]interface{}
+
 	r         io.Reader
 	byteOrder binary.ByteOrder
 	offset    uint32
 	context   interface{}
 }
 
-func (p *Parser) Offset() uint {
-	return uint(p.offset)
+func (p *Parser) Offset() uint32 {
+	return p.offset
+}
+
+func (p *Parser) Context() interface{} {
+	return p.context
 }
 
 func NewParser(r io.Reader, order binary.ByteOrder) *Parser {
-	return &Parser{r, order, 0, nil}
+	return &Parser{false, false, make(map[string]interface{}), r, order, 0, nil}
 }
 
 type Verifier interface {
-	Verify(context interface{}) error
+	Verify(*Parser) error
 }
 
 func (p *Parser) callVerify(data interface{}) error {
-	if data, ok := data.(Verifier); ok {
-		err := data.Verify(p.context)
+	if dat, ok := data.(Verifier); ok {
+		/*fmt.Printf(">>>>Verifying %v\n", reflect.TypeOf(data))*/
+		err := dat.Verify(p)
 		return err
+	} else {
+		typ := reflect.TypeOf(data)
+		if typ != nil {
+			if _, ok := typ.MethodByName("Verify"); ok {
+				p.RaiseError(&Error{fmt.Sprintf("Type %v has a Verify method with incorrect signature. Expected Verify(p *bingo.Parser) error", typ)})
+			}
+		}
 	}
 	return nil
 }
 
 func (p *Parser) EmitReadStruct(data interface{}) (err error) {
-	/*defer func() {*/
-	/*if r := recover(); r != nil {*/
-	/*if _, ok := r.(runtime.Error); ok {*/
-	/*panic(r)*/
-	/*}*/
+	if !p.Panicky {
+		defer func() {
+			if r := recover(); r != nil {
+				if _, ok := r.(runtime.Error); ok {
+					panic(r)
+				}
 
-	/*switch x := r.(type) {*/
-	/*case error:*/
-	/*err = x*/
-	/*case string:*/
-	/*err = errors.New(x)*/
-	/*default:*/
-	/*// This should not be reachable unless there's a bug in the package*/
-	/*panic(r)*/
-	/*}*/
-	/*}*/
-	/*}()*/
+				if _, ok := r.(reflect.ValueError); ok {
+					panic(r)
+				}
+
+				switch x := r.(type) {
+				case error:
+					err = x
+				case string:
+					err = errors.New(x)
+				default:
+					// This should not be reachable unless there's a bug in the package
+					panic(r)
+				}
+			}
+		}()
+	}
 
 	// Assign the context on the first (non-recursive) call
 	if p.context == nil {
@@ -94,10 +124,11 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 				meth, ok := ptrtyp.MethodByName(ifstr)
 				if ok {
 					// TODO: check method signature
-					ctxval := reflect.ValueOf(p.context)
+					ctxval := reflect.ValueOf(p)
 					result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0].Interface().(bool)
 					if negate == result {
 						// Skip this field
+						/*fmt.Printf("Skipping field %+v\n", fieldtyp.Name)*/
 						continue
 					}
 				}
@@ -164,9 +195,24 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 							p.readSliceFromBytes(fieldval, fieldtyp.Type, buf)
 						}
 					} else {
-						lenfield := val.FieldByName(lenkey)
-						length := p.extractInt(lenfield)
+						var length int
+
+						if len(lenkey) > 2 && lenkey[len(lenkey)-1] == ')' && lenkey[len(lenkey)-2] == '(' {
+							methodname := lenkey[:len(lenkey)-2]
+							if meth, ok := ptrtyp.MethodByName(methodname); ok {
+								ctxval := reflect.ValueOf(p)
+								result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0]
+								length = p.extractInt(result)
+							} else {
+								p.RaiseError(errors.New(fmt.Sprintf("Method with name %v not found", methodname)))
+							}
+						} else {
+							lenfield := val.FieldByName(lenkey)
+							length = p.extractInt(lenfield)
+						}
+
 						if length > 0 {
+							/*fmt.Printf("Allocating slice of length %v, type %v\n", length, fieldtyp.Type)*/
 							slice := reflect.MakeSlice(fieldtyp.Type, length, length)
 							islice := slice.Interface()
 
@@ -185,6 +231,8 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 									}
 								}
 							} else {
+								/*fmt.Printf("Size of the field %v is %v\n", fieldtyp.Name, size)*/
+								/*fmt.Printf("Read so far %v\n", p.offset)*/
 								// Fast path for fixed-size element type
 								p.EmitReadFixed(islice)
 							}
@@ -219,6 +267,7 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 				ptr := reflect.New(tptr)
 				ptr.Elem().Set(fieldval.Addr())
 
+				/*fmt.Printf("Parsing into struct %+v\n", fieldval)*/
 				err := p.EmitReadStruct(ptr.Elem().Interface())
 				if err != nil {
 					return err
@@ -234,11 +283,21 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 				/*fmt.Printf("%+v\n", fieldval.Type())*/
 				/*fmt.Printf("%+v\n", fieldval.Elem())*/
 				/*fmt.Printf("%+v\n", fieldval.Elem().Kind())*/
+				p.RaiseError(errors.New("Unsupported ptr field"))
 
 			case reflect.Func:
 				// Ignore functions
 
 			default:
+				if len(fieldtyp.PkgPath) > 0 {
+					// unexported field. skip it
+					if p.Strict {
+						p.RaiseError(&Error{fmt.Sprintf("Can't parse into unexported field %v", fieldtyp.Name)})
+					} else {
+						break
+					}
+				}
+
 				// Try to read as fixed data
 				tptr := reflect.PtrTo(fieldval.Type())
 				ptr := reflect.New(tptr)
@@ -253,6 +312,7 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 				nbytesRead := p.offset - offset
 				mod := nbytesRead % padding
 				if mod != 0 {
+					/*fmt.Printf(">>> Apply padding of %+v\n", padding - mod)*/
 					p.EmitSkipNBytes(int(padding - mod))
 				}
 			}
