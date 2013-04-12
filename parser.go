@@ -233,16 +233,7 @@ func (p *Parser) emitReadStruct(data interface{}) {
 
 
 		case reflect.Ptr:
-			/*if fieldval.IsNil() {*/
-			/*val := reflect.New(fieldval.Type().Elem())*/
-			/*fmt.Printf("%+v\n", val)*/
-			/*} else {*/
-			/*p.emitReadStruct(fieldval.Interface())*/
-			/*}*/
-			/*fmt.Printf("%+v\n", fieldval.Type())*/
-			/*fmt.Printf("%+v\n", fieldval.Elem())*/
-			/*fmt.Printf("%+v\n", fieldval.Elem().Kind())*/
-			p.RaiseError(errors.New("Unsupported ptr field"))
+			p.RaiseError2("Error reading field '%v %v'. Pointer fields are not supported.", fieldtyp.Name, fieldtyp.Type)
 
 		case reflect.Func:
 			// Ignore functions
@@ -251,9 +242,9 @@ func (p *Parser) emitReadStruct(data interface{}) {
 			if len(fieldtyp.PkgPath) > 0 {
 				// unexported field. skip it
 				if p.strict {
-					p.RaiseError(&Error{fmt.Sprintf("Can't parse into unexported field %v", fieldtyp.Name)})
+					p.RaiseError2("Unable to parse into '%v %v'. Unexported fields are not supported.", fieldtyp.Name, fieldtyp.Type)
 				} else {
-					break
+					continue
 				}
 			}
 

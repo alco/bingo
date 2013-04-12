@@ -57,6 +57,25 @@ func TestEmptyStruct(t *testing.T) {
 	}
 }
 
+func TestPtrField(t *testing.T) {
+	s := struct {
+		Data *int8
+	}{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Error reading field 'Data *int8'. Pointer fields are not supported." {
+			t.Error("Incorrect error:", err)
+		}
+	} else {
+		t.Fail()
+	}
+
+	if p.offset != 0 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
 func TestEmptySlice(t *testing.T) {
 	byteSlice := struct {
 		Data []byte
@@ -850,15 +869,15 @@ func TestStrictMode(t *testing.T) {
 	p := NewParser(nil, BigEndian, Strict)
 
 	if err := p.EmitReadStruct(&s); err != nil {
-		if _, ok := err.(*Error); !ok {
-			t.Error(err)
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Unable to parse into 'dummy uint32'. Unexported fields are not supported." {
+			t.Error("Incorrect error:", err)
 		}
 	} else {
-		t.Error("Didn't fail on unexported field")
+		t.Fail()
 	}
 
 	if p.offset != 0 {
-		t.Error("Invalid offset after parsing unexported field", p.offset)
+		t.Error("Invalid offset:", p.offset)
 	}
 }
 
