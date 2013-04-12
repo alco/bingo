@@ -17,16 +17,31 @@ func newParserData(data []byte) *Parser {
 	return NewParser(bytes.NewReader(data), LittleEndian, Default)
 }
 
-func isEqualu16(a []uint16, b []uint16) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := 0; i < len(a); i++ {
-		if a[i] != b[i] {
-			return false
+
+func TestNonStruct(t *testing.T) {
+	thing := 15
+	p := newParser()
+
+	if err := p.EmitReadStruct(&thing); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Invalid argument type *int. Expected pointer to a struct." {
+			t.Error("Incorrect error:", err)
 		}
+	} else {
+		t.Fail()
 	}
-	return true
+}
+
+func TestNonPointer(t *testing.T) {
+	s := struct{}{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(s); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Invalid argument type struct {}. Expected pointer to a struct." {
+			t.Error("Incorrect error:", err)
+		}
+	} else {
+		t.Fail()
+	}
 }
 
 func TestEmptyStruct(t *testing.T) {
@@ -38,7 +53,7 @@ func TestEmptyStruct(t *testing.T) {
 	}
 
 	if p.offset != 0 {
-		t.Error("Non-zero offset after reading into empty struct")
+		t.Error("Non-zero offset:", p.offset)
 	}
 }
 
@@ -188,7 +203,7 @@ func TestSliceInt(t *testing.T) {
 	if !(uint32(len(s.Data)) == s.Length && isEqualu16(s.Data, []uint16{1, 2, 3, 4})) {
 		t.Error("Invalid data read into []byte:", s.Data)
 	}
-	if p.offset != uint32(len(data)) {
+	if p.offset != uint(len(data)) {
 		t.Error("Invalid parser offset after parsing int slice:", p.offset)
 	}
 }
@@ -425,6 +440,25 @@ func TestCustomTypeZeroPad(t *testing.T) {
 	}
 	if p.offset != 10+2 {
 		t.Error("Invalid offset after custom padded type PascalString with length 0:", p.offset)
+	}
+}
+
+func TestInvalidPadding(t *testing.T) {
+	s := struct {
+		Data []byte `pad:"string"`
+	}{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Invalid value for `pad` tag: string. Expected an integer." {
+			t.Error("Incorrect error:", err)
+		}
+	} else {
+		t.Fail()
+	}
+
+	if p.offset != 0 {
+		t.Error("Invalid offset:", p.offset)
 	}
 }
 
@@ -782,7 +816,7 @@ func TestReadUntilEOF(t *testing.T) {
 	if string(s.Data) != "Hello world!" {
 		t.Error("Error reading until EOF into []byte:", s.Data)
 	}
-	if p.offset != uint32(len(data)) {
+	if p.offset != uint(len(data)) {
 		t.Error("Invalid offset after reading until EOF into []byte:", p.offset)
 	}
 }
@@ -839,3 +873,16 @@ func TestPanickyMode(t *testing.T) {
 // * bool, string
 // * slice of pointers
 // * precise error reporting
+
+
+func isEqualu16(a []uint16, b []uint16) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

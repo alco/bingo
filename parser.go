@@ -11,7 +11,17 @@ import (
 	"strconv"
 )
 
-type ParseError error
+type ParseError struct {
+	text string
+}
+
+func parseError(msg string) *ParseError {
+	return &ParseError{msg}
+}
+
+func (err *ParseError) Error() string {
+	return err.text
+}
 
 type Error struct {
 	Text string
@@ -36,7 +46,7 @@ const (
 type Parser struct {
 	r         io.Reader
 	byteOrder binary.ByteOrder
-	offset    uint32
+	offset    uint
 	context   interface{}
 
 	Tags map[string]interface{}
@@ -56,7 +66,7 @@ func NewParser(r io.Reader, byteOrder ByteOrder, options ParseOptions) *Parser {
 	return &p
 }
 
-func (p *Parser) Offset() uint32 {
+func (p *Parser) Offset() uint {
 	return p.offset
 }
 
@@ -110,264 +120,207 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 		}()
 	}
 
+	// Initial sanity checks
+	ptrtyp := reflect.TypeOf(data)
+	if ptrtyp.Kind() != reflect.Ptr {
+		p.RaiseError2("Invalid argument type %v. Expected pointer to a struct.", ptrtyp)
+	}
+	typ := ptrtyp.Elem()
+	if typ.Kind() != reflect.Struct {
+		p.RaiseError2("Invalid argument type %v. Expected pointer to a struct.", ptrtyp)
+	}
+
+	ptrval := reflect.ValueOf(data)
+	val := ptrval.Elem()
+
 	// Assign the context on the first (non-recursive) call
 	if p.context == nil {
 		p.context = data
 	}
 
-	/*// Try fast path for fixed-size data*/
-	/*if p.EmitReadFixed(data) {*/
-	/*return p.callVerify(data)*/
-	/*}*/
-
-	// Start reflecting
-	ptrtyp := reflect.TypeOf(data)
-	typ := ptrtyp.Elem()
-	if typ.Kind() != reflect.Struct {
-		p.RaiseError(errors.New(fmt.Sprintf("Expected a pointer to a struct. Got %+v", typ.Kind())))
-	}
-	ptrval := reflect.ValueOf(data)
-	val := ptrval.Elem()
-
-	fieldIdx := 0
 	nfields := typ.NumField()
-	for fieldIdx < nfields {
-		/*pendingBytes := 0*/
-		/*firstFixedFieldIdx := fieldIdx*/
-		for ; fieldIdx < nfields; fieldIdx++ {
-			// check for read condition
-			fieldtyp := typ.Field(fieldIdx)
-			ifstr := fieldtyp.Tag.Get("if")
-			if len(ifstr) > 0 {
-				negate := false
-				if ifstr[0] == '!' {
-					negate = true
-					ifstr = ifstr[1:]
-				}
-				meth, ok := ptrtyp.MethodByName(ifstr)
-				if ok {
-					// TODO: check method signature
-					ctxval := reflect.ValueOf(p)
-					result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0].Interface().(bool)
-					if negate == result {
-						// Skip this field
-						/*fmt.Printf("Skipping field %+v\n", fieldtyp.Name)*/
-						continue
-					}
-				}
-			}
+	for fieldIdx := 0; fieldIdx < nfields; fieldIdx++ {
+		fieldtyp := typ.Field(fieldIdx)
+		fieldval := val.Field(fieldIdx)
 
-			// TODO: actually do bulk reading of fixed-size fields,
-			// then iterate over them to see if any of them needs verification
-			//
-			// If a field depends on the previous field passing verification,
-			// user should add an `if` tag
-			//
-			// Bulk reading will be removed eventually, because encoding/binary
-			// runs its own loop over struct fields and doesn't actually read
-			// them as one unit
+		if !p.ifTagSatisfied(fieldtyp, ptrtyp, ptrval) {
+			continue
+		}
 
-			/*fieldval := val.Field(fieldIdx)*/
-			/*if fieldval.Kind() == reflect.Ptr && fieldval.IsNil() {*/
-			/*break*/
-			/*}*/
-			/*iface := val.Field(fieldIdx).Interface()*/
-			/*fieldSize := binary.Size(iface)*/
-			/*if fieldSize <= 0 {*/
-			/*// TODO: examine edge case with size == 0*/
-			/*break*/
-			/*}*/
-			/*pendingBytes += fieldSize*/
-			/*}*/
+		// Remember current offset to calculate padded bytes after reading
+		// current field
+		offset := p.offset
 
-			/*// We can now read `pendingBytes` bytes before proceeding*/
-			/*if pendingBytes > 0 {*/
-			/*buf := p.EmitReadNBytes(pendingBytes)*/
-			/*d := &decoder{order: p.byteOrder, buf: buf, firstField: firstFixedFieldIdx, lastField: fieldIdx}*/
-			/*d.value(val)*/
-			/*}*/
-
-			/*for ; fieldIdx < nfields; fieldIdx++ {*/
-			fieldval := val.Field(fieldIdx)
-			/*fieldtyp := typ.Field(fieldIdx)*/
-
-			/*if binary.Size(fieldval.Interface()) > 0 {*/
-			/*// TODO: examine edge case with size == 0*/
-			/*// Fixed-size field. Time to break out from this loop*/
-			/*break*/
-			/*}*/
-
-			var padding uint32
-			offset := p.offset
-			padstr := fieldtyp.Tag.Get("pad")
-			if len(padstr) > 0 {
-				pad, err := strconv.ParseUint(padstr, 0, 8)
-				if err != nil {
-					p.RaiseError(err)
-				}
-				padding = uint32(pad)
-			}
-
-			switch fieldval.Kind() {
-			case reflect.Slice:
-				if lenkey := fieldtyp.Tag.Get("len"); len(lenkey) > 0 {
-					if lenkey == "<inf>" {
-						// read until EOF
-						buf := p.EmitReadAll()
-						if len(buf) > 0 {
-							p.readSliceFromBytes(fieldval, fieldtyp.Type, buf)
-						}
-					} else {
-						var length int
-
-						if len(lenkey) > 2 && lenkey[len(lenkey)-1] == ')' && lenkey[len(lenkey)-2] == '(' {
-							methodname := lenkey[:len(lenkey)-2]
-							if meth, ok := ptrtyp.MethodByName(methodname); ok {
-								ctxval := reflect.ValueOf(p)
-								result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0]
-								length = p.extractInt(result)
-							} else {
-								p.RaiseError(errors.New(fmt.Sprintf("Method with name %v not found", methodname)))
-							}
-						} else {
-							lenfield := val.FieldByName(lenkey)
-							length = p.extractInt(lenfield)
-						}
-
-						if length > 0 {
-							/*fmt.Printf("Allocating slice of length %v, type %v\n", length, fieldtyp.Type)*/
-							slice := reflect.MakeSlice(fieldtyp.Type, length, length)
-							islice := slice.Interface()
-
-							size := binary.Size(islice)
-							if size < 0 {
-								// Varsize type, need to parse each element via recursive call
-								for i := 0; i < length; i++ {
-									elem := slice.Index(i)
-									tptr := reflect.PtrTo(fieldtyp.Type.Elem())
-									ptr := reflect.New(tptr)
-									ptr.Elem().Set(elem.Addr())
-
-									err := p.EmitReadStruct(ptr.Elem().Interface())
-									if err != nil {
-										return err
-									}
-								}
-							} else {
-								/*fmt.Printf("Size of the field %v is %v\n", fieldtyp.Name, size)*/
-								/*fmt.Printf("Read so far %v\n", p.offset)*/
-								// Fast path for fixed-size element type
-								p.EmitReadFixed(islice)
-							}
-							fieldval.Set(slice)
-						}
-					}
-				} else if sizekey := fieldtyp.Tag.Get("size"); len(sizekey) > 0 {
-					var buf []byte
-					if sizekey == "<inf>" {
-						// read until EOF
-						buf = p.EmitReadAll()
-					} else {
-						sizefield := val.FieldByName(sizekey)
-						size := p.extractInt(sizefield)
-						buf = p.EmitReadNBytes(size)
-					}
+		switch fieldval.Kind() {
+		case reflect.Slice:
+			if lenkey := fieldtyp.Tag.Get("len"); len(lenkey) > 0 {
+				if lenkey == "<inf>" {
+					// read until EOF
+					buf := p.EmitReadAll()
 					if len(buf) > 0 {
 						p.readSliceFromBytes(fieldval, fieldtyp.Type, buf)
 					}
 				} else {
-					// Length for the slice not specified. Try parsing it as is.
-					p.EmitReadFixed(fieldval.Interface())
-				}
+					var length int
 
-			case reflect.Struct:
-				if !fieldval.CanAddr() {
-					p.RaiseError(errors.New("Value cannot Addr()"))
-				}
-				// Construct a pointer to the given field
-				// and pass it to a recursive call
-				tptr := reflect.PtrTo(fieldval.Type())
-				ptr := reflect.New(tptr)
-				ptr.Elem().Set(fieldval.Addr())
-
-				/*fmt.Printf("Parsing into struct %+v\n", fieldval)*/
-				err := p.EmitReadStruct(ptr.Elem().Interface())
-				if err != nil {
-					return err
-				}
-
-			case reflect.Ptr:
-				/*if fieldval.IsNil() {*/
-				/*val := reflect.New(fieldval.Type().Elem())*/
-				/*fmt.Printf("%+v\n", val)*/
-				/*} else {*/
-				/*p.EmitReadStruct(fieldval.Interface())*/
-				/*}*/
-				/*fmt.Printf("%+v\n", fieldval.Type())*/
-				/*fmt.Printf("%+v\n", fieldval.Elem())*/
-				/*fmt.Printf("%+v\n", fieldval.Elem().Kind())*/
-				p.RaiseError(errors.New("Unsupported ptr field"))
-
-			case reflect.Func:
-				// Ignore functions
-
-			default:
-				if len(fieldtyp.PkgPath) > 0 {
-					// unexported field. skip it
-					if p.strict {
-						p.RaiseError(&Error{fmt.Sprintf("Can't parse into unexported field %v", fieldtyp.Name)})
+					if len(lenkey) > 2 && lenkey[len(lenkey)-1] == ')' && lenkey[len(lenkey)-2] == '(' {
+						methodname := lenkey[:len(lenkey)-2]
+						if meth, ok := ptrtyp.MethodByName(methodname); ok {
+							ctxval := reflect.ValueOf(p)
+							result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0]
+							length = p.extractInt(result)
+						} else {
+							p.RaiseError(errors.New(fmt.Sprintf("Method with name %v not found", methodname)))
+						}
 					} else {
-						break
+						lenfield := val.FieldByName(lenkey)
+						length = p.extractInt(lenfield)
+					}
+
+					if length > 0 {
+						/*fmt.Printf("Allocating slice of length %v, type %v\n", length, fieldtyp.Type)*/
+						slice := reflect.MakeSlice(fieldtyp.Type, length, length)
+						islice := slice.Interface()
+
+						size := binary.Size(islice)
+						if size < 0 {
+							// Varsize type, need to parse each element via recursive call
+							for i := 0; i < length; i++ {
+								elem := slice.Index(i)
+								tptr := reflect.PtrTo(fieldtyp.Type.Elem())
+								ptr := reflect.New(tptr)
+								ptr.Elem().Set(elem.Addr())
+
+								err := p.EmitReadStruct(ptr.Elem().Interface())
+								if err != nil {
+									return err
+								}
+							}
+						} else {
+							/*fmt.Printf("Size of the field %v is %v\n", fieldtyp.Name, size)*/
+							/*fmt.Printf("Read so far %v\n", p.offset)*/
+							// Fast path for fixed-size element type
+							p.EmitReadFixed(islice)
+						}
+						fieldval.Set(slice)
 					}
 				}
+			} else if sizekey := fieldtyp.Tag.Get("size"); len(sizekey) > 0 {
+				var buf []byte
+				if sizekey == "<inf>" {
+					// read until EOF
+					buf = p.EmitReadAll()
+				} else {
+					sizefield := val.FieldByName(sizekey)
+					size := p.extractInt(sizefield)
+					buf = p.EmitReadNBytes(size)
+				}
+				if len(buf) > 0 {
+					p.readSliceFromBytes(fieldval, fieldtyp.Type, buf)
+				}
+			} else {
+				// Length for the slice not specified. Try parsing it as is.
+				p.EmitReadFixed(fieldval.Interface())
+			}
 
-				// Try to read as fixed data
-				tptr := reflect.PtrTo(fieldval.Type())
-				ptr := reflect.New(tptr)
-				ptr.Elem().Set(fieldval.Addr())
+		case reflect.Struct:
+			if !fieldval.CanAddr() {
+				p.RaiseError(errors.New("Value cannot Addr()"))
+			}
+			// Construct a pointer to the given field
+			// and pass it to a recursive call
+			tptr := reflect.PtrTo(fieldval.Type())
+			ptr := reflect.New(tptr)
+			ptr.Elem().Set(fieldval.Addr())
 
-				if !p.EmitReadFixed(ptr.Elem().Interface()) {
-					p.RaiseError(errors.New(fmt.Sprintf("Unhandled type %v", fieldval.Kind())))
+			/*fmt.Printf("Parsing into struct %+v\n", fieldval)*/
+			err := p.EmitReadStruct(ptr.Elem().Interface())
+			if err != nil {
+				return err
+			}
+
+		case reflect.Ptr:
+			/*if fieldval.IsNil() {*/
+			/*val := reflect.New(fieldval.Type().Elem())*/
+			/*fmt.Printf("%+v\n", val)*/
+			/*} else {*/
+			/*p.EmitReadStruct(fieldval.Interface())*/
+			/*}*/
+			/*fmt.Printf("%+v\n", fieldval.Type())*/
+			/*fmt.Printf("%+v\n", fieldval.Elem())*/
+			/*fmt.Printf("%+v\n", fieldval.Elem().Kind())*/
+			p.RaiseError(errors.New("Unsupported ptr field"))
+
+		case reflect.Func:
+			// Ignore functions
+
+		default:
+			if len(fieldtyp.PkgPath) > 0 {
+				// unexported field. skip it
+				if p.strict {
+					p.RaiseError(&Error{fmt.Sprintf("Can't parse into unexported field %v", fieldtyp.Name)})
+				} else {
+					break
 				}
 			}
 
-			if padding > 1 {
-				nbytesRead := p.offset - offset
-				mod := nbytesRead % padding
-				if mod != 0 {
-					/*fmt.Printf(">>> Apply padding of %+v\n", padding - mod)*/
-					p.EmitSkipNBytes(int(padding - mod))
-				}
+			// Try to read as fixed data
+			tptr := reflect.PtrTo(fieldval.Type())
+			ptr := reflect.New(tptr)
+			ptr.Elem().Set(fieldval.Addr())
+
+			if !p.EmitReadFixed(ptr.Elem().Interface()) {
+				p.RaiseError(errors.New(fmt.Sprintf("Unhandled type %v", fieldval.Kind())))
 			}
+		}
 
-			/*// Inspect the field's tag to find out how to parse it*/
-			/*fieldv := reflect.ValueOf(data).Elem().Field(i)*/
-			/*field := t.Elem().Field(i)*/
-			/*if fieldv.Kind() == reflect.Struct {*/
-			/*p.ReadStructuredData(fieldv.Interface())*/
-			/*} else if fieldv.Kind() == reflect.Slice {*/
-			/*lenkey := field.Tag.Get("length")*/
-			/*var lenfield reflect.Value*/
-			/*if len(lenkey) > 0 {*/
-			/*lenfield = reflect.ValueOf(data).Elem().FieldByName(lenkey)*/
-			/*}*/
-			/*flength := int(lenfield.Interface().(uint32))*/
-			/*slice := reflect.MakeSlice(field.Type, flength, flength)*/
-			/*ss := slice.Interface().([]byte)*/
-			/*cg.emitReadSliceByte(ss)*/
-			/*// read into slice ...*/
-			/*fieldv.Set(slice)*/
-			/*}*/
-			/*pad := field.Tag.Get("pad")*/
-			/*if len(pad) > 0 {*/
-			/*// ...*/
-			/*}*/
-
-			/*fmt.Printf("Read var-length field %v\n", field.Name)*/
+		padding := p.calculatePadding(fieldtyp, offset)
+		if padding > 0 {
+			p.EmitSkipNBytes(int(padding))
 		}
 	}
 
 	return p.callVerify(data)
+}
+
+func (p *Parser) ifTagSatisfied(fieldtyp reflect.StructField, ptrtyp reflect.Type, ptrval reflect.Value) bool {
+	// check for a condition
+	ifstr := fieldtyp.Tag.Get("if")
+	if len(ifstr) > 0 {
+		negate := false
+		if ifstr[0] == '!' {
+			negate = true
+			ifstr = ifstr[1:]
+		}
+		meth, ok := ptrtyp.MethodByName(ifstr)
+		if ok {
+			// TODO: check method signature
+			ctxval := reflect.ValueOf(p)
+			result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0].Interface().(bool)
+			if negate == result {
+				// Skip this field
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (p *Parser) calculatePadding(fieldtyp reflect.StructField, offset uint) uint {
+	padstr := fieldtyp.Tag.Get("pad")
+	if len(padstr) > 0 {
+		padding, err := strconv.ParseUint(padstr, 0, 8)
+		if err != nil {
+			p.RaiseError2("Invalid value for `pad` tag: %v. Expected an integer.", padstr)
+		}
+
+		nbytesRead := p.offset - offset
+		mod := nbytesRead % uint(padding)
+		if mod != 0 {
+			return uint(padding) - mod
+		}
+	}
+	return 0
 }
 
 func (p *Parser) EmitReadFixed(data interface{}) bool {
@@ -386,7 +339,7 @@ func (p *Parser) EmitReadFixedFast(data interface{}, size int) {
 		/*p.RaiseError(err)*/
 		p.RaiseError(errors.New(fmt.Sprintf("%v while reading of size %v", err, size)))
 	}
-	p.offset += uint32(size)
+	p.offset += uint(size)
 }
 
 func (p *Parser) EmitReadNBytes(nbytes int) []byte {
@@ -400,7 +353,7 @@ func (p *Parser) EmitReadFull(buf []byte) {
 	if err != nil {
 		p.RaiseError(err)
 	}
-	p.offset += uint32(nbytes)
+	p.offset += uint(nbytes)
 }
 
 func (p *Parser) EmitReadAll() []byte {
@@ -409,7 +362,7 @@ func (p *Parser) EmitReadAll() []byte {
 	if err != nil {
 		p.RaiseError(err)
 	}
-	p.offset += uint32(nbytes)
+	p.offset += uint(nbytes)
 	return buf.Bytes()
 }
 
@@ -456,6 +409,10 @@ func (p *Parser) readSliceFromBytes(val reflect.Value, typ reflect.Type, buf []b
 
 func (p *Parser) RaiseError(err error) {
 	panic(err)
+}
+
+func (p *Parser) RaiseError2(msg string, args ...interface{}) {
+	panic(parseError(fmt.Sprintf(msg, args...)))
 }
 
 func (p *Parser) extractInt(val reflect.Value) int {
