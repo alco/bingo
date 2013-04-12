@@ -2,7 +2,6 @@ package bingo
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"testing"
 	"unicode/utf16"
@@ -15,7 +14,7 @@ func newParser() *Parser {
 }
 
 func newParserData(data []byte) *Parser {
-	return NewParser(bytes.NewReader(data), binary.LittleEndian)
+	return NewParser(bytes.NewReader(data), LittleEndian, Default)
 }
 
 func isEqualu16(a []uint16, b []uint16) bool {
@@ -78,7 +77,7 @@ func TestLength32Little(t *testing.T) {
 		Length uint32
 	}{}
 	p := newParser()
-	p.byteOrder = binary.LittleEndian
+	p.byteOrder = LittleEndian
 
 	if err := p.EmitReadStruct(&s); err != nil {
 		t.Error(err)
@@ -97,7 +96,7 @@ func TestLength16Little(t *testing.T) {
 		Length uint16
 	}{}
 	p := newParser()
-	p.byteOrder = binary.LittleEndian
+	p.byteOrder = LittleEndian
 
 	if err := p.EmitReadStruct(&s); err != nil {
 		t.Error(err)
@@ -116,7 +115,7 @@ func TestLength32Big(t *testing.T) {
 		Length uint32
 	}{}
 	p := newParser()
-	p.byteOrder = binary.BigEndian
+	p.byteOrder = BigEndian
 
 	if err := p.EmitReadStruct(&s); err != nil {
 		t.Error(err)
@@ -135,7 +134,7 @@ func TestLength16Big(t *testing.T) {
 		Length uint16
 	}{}
 	p := newParser()
-	p.byteOrder = binary.BigEndian
+	p.byteOrder = BigEndian
 
 	if err := p.EmitReadStruct(&s); err != nil {
 		t.Error(err)
@@ -265,7 +264,7 @@ func TestFixedSizeStructLittle(t *testing.T) {
 func TestFixedSizeStructBig(t *testing.T) {
 	s := FixedSizeStruct{}
 	p := newParserData(fixedSizeData)
-	p.byteOrder = binary.BigEndian
+	p.byteOrder = BigEndian
 
 	if err := p.EmitReadStruct(&s); err != nil {
 		t.Error(err)
@@ -814,8 +813,7 @@ func TestVerifyDetect(t *testing.T) {
 
 func TestStrictMode(t *testing.T) {
 	s := WrongVerifier{}
-	p := newParser()
-	p.Strict = true
+	p := NewParser(nil, BigEndian, Strict)
 
 	if err := p.EmitReadStruct(&s); err != nil {
 		if _, ok := err.(*Error); !ok {

@@ -11,6 +11,8 @@ import (
 	"strconv"
 )
 
+type ParseError error
+
 type Error struct {
 	Text string
 }
@@ -19,15 +21,39 @@ func (err *Error) Error() string {
 	return err.Text
 }
 
-type Parser struct {
-	Strict    bool
-	Panicky   bool
-	Tags map[string]interface{}
+type ByteOrder binary.ByteOrder
+var BigEndian = binary.BigEndian
+var LittleEndian = binary.LittleEndian
 
+type ParseOptions int
+
+const (
+	Default ParseOptions = iota << 1
+	Strict
+	Panicky
+)
+
+type Parser struct {
 	r         io.Reader
 	byteOrder binary.ByteOrder
 	offset    uint32
 	context   interface{}
+
+	Tags map[string]interface{}
+
+	strict    bool
+	panicky   bool
+}
+
+func NewParser(r io.Reader, byteOrder ByteOrder, options ParseOptions) *Parser {
+	p := Parser{r: r, Tags: make(map[string]interface{}), byteOrder: byteOrder}
+	if options & Strict != 0 {
+		p.strict = true
+	}
+	if options & Panicky != 0 {
+		p.panicky = true
+	}
+	return &p
 }
 
 func (p *Parser) Offset() uint32 {
@@ -38,9 +64,6 @@ func (p *Parser) Context() interface{} {
 	return p.context
 }
 
-func NewParser(r io.Reader, order binary.ByteOrder) *Parser {
-	return &Parser{false, false, make(map[string]interface{}), r, order, 0, nil}
-}
 
 type Verifier interface {
 	Verify(*Parser) error
@@ -63,7 +86,7 @@ func (p *Parser) callVerify(data interface{}) error {
 }
 
 func (p *Parser) EmitReadStruct(data interface{}) (err error) {
-	if !p.Panicky {
+	if !p.panicky {
 		defer func() {
 			if r := recover(); r != nil {
 				if _, ok := r.(runtime.Error); ok {
@@ -291,7 +314,7 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 			default:
 				if len(fieldtyp.PkgPath) > 0 {
 					// unexported field. skip it
-					if p.Strict {
+					if p.strict {
 						p.RaiseError(&Error{fmt.Sprintf("Can't parse into unexported field %v", fieldtyp.Name)})
 					} else {
 						break
