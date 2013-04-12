@@ -79,11 +79,13 @@ type Verifier interface {
 	Verify(*Parser) error
 }
 
-func (p *Parser) callVerify(data interface{}) error {
+func (p *Parser) callVerify(data interface{}) {
 	if dat, ok := data.(Verifier); ok {
 		/*fmt.Printf(">>>>Verifying %v\n", reflect.TypeOf(data))*/
 		err := dat.Verify(p)
-		return err
+		if err != nil {
+			p.RaiseError(err)
+		}
 	} else {
 		typ := reflect.TypeOf(data)
 		if typ != nil {
@@ -92,7 +94,6 @@ func (p *Parser) callVerify(data interface{}) error {
 			}
 		}
 	}
-	return nil
 }
 
 func (p *Parser) EmitReadStruct(data interface{}) (err error) {
@@ -120,6 +121,12 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 		}()
 	}
 
+	p.context = data
+	p.emitReadStruct(data)
+	return
+}
+
+func (p *Parser) emitReadStruct(data interface{}) {
 	// Initial sanity checks
 	ptrtyp := reflect.TypeOf(data)
 	if ptrtyp.Kind() != reflect.Ptr {
@@ -132,11 +139,6 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 
 	ptrval := reflect.ValueOf(data)
 	val := ptrval.Elem()
-
-	// Assign the context on the first (non-recursive) call
-	if p.context == nil {
-		p.context = data
-	}
 
 	nfields := typ.NumField()
 	for fieldIdx := 0; fieldIdx < nfields; fieldIdx++ {
@@ -152,6 +154,15 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 		offset := p.offset
 
 		switch fieldval.Kind() {
+		case reflect.Struct:
+			// Construct a pointer to the given field
+			// and pass it to a recursive call
+			tptr := reflect.PtrTo(fieldtyp.Type)
+			ptr := reflect.New(tptr)
+			ptr.Elem().Set(fieldval.Addr())
+
+			p.emitReadStruct(ptr.Elem().Interface())
+
 		case reflect.Slice:
 			if lenkey := fieldtyp.Tag.Get("len"); len(lenkey) > 0 {
 				if lenkey == "<inf>" {
@@ -191,10 +202,7 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 								ptr := reflect.New(tptr)
 								ptr.Elem().Set(elem.Addr())
 
-								err := p.EmitReadStruct(ptr.Elem().Interface())
-								if err != nil {
-									return err
-								}
+								p.emitReadStruct(ptr.Elem().Interface())
 							}
 						} else {
 							/*fmt.Printf("Size of the field %v is %v\n", fieldtyp.Name, size)*/
@@ -223,28 +231,13 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 				p.EmitReadFixed(fieldval.Interface())
 			}
 
-		case reflect.Struct:
-			if !fieldval.CanAddr() {
-				p.RaiseError(errors.New("Value cannot Addr()"))
-			}
-			// Construct a pointer to the given field
-			// and pass it to a recursive call
-			tptr := reflect.PtrTo(fieldval.Type())
-			ptr := reflect.New(tptr)
-			ptr.Elem().Set(fieldval.Addr())
-
-			/*fmt.Printf("Parsing into struct %+v\n", fieldval)*/
-			err := p.EmitReadStruct(ptr.Elem().Interface())
-			if err != nil {
-				return err
-			}
 
 		case reflect.Ptr:
 			/*if fieldval.IsNil() {*/
 			/*val := reflect.New(fieldval.Type().Elem())*/
 			/*fmt.Printf("%+v\n", val)*/
 			/*} else {*/
-			/*p.EmitReadStruct(fieldval.Interface())*/
+			/*p.emitReadStruct(fieldval.Interface())*/
 			/*}*/
 			/*fmt.Printf("%+v\n", fieldval.Type())*/
 			/*fmt.Printf("%+v\n", fieldval.Elem())*/
@@ -280,7 +273,7 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 		}
 	}
 
-	return p.callVerify(data)
+	p.callVerify(data)
 }
 
 func (p *Parser) ifTagSatisfied(fieldtyp reflect.StructField, ptrtyp reflect.Type, ptrval reflect.Value) bool {
@@ -389,10 +382,7 @@ func (p *Parser) readSliceFromBytes(val reflect.Value, typ reflect.Type, buf []b
 		offset := p.offset
 		elemptr := reflect.New(typ.Elem())
 
-		err := p.EmitReadStruct(elemptr.Interface())
-		if err != nil {
-			p.RaiseError(err)
-		}
+		p.emitReadStruct(elemptr.Interface())
 		sliceval = reflect.Append(sliceval, elemptr.Elem())
 
 		bytesRead += uint(p.offset - offset)
