@@ -932,7 +932,7 @@ func TestConflictingTags(t *testing.T) {
 func TestReadUntilEOF(t *testing.T) {
 	data := []byte("Hello world!")
 	s := struct {
-		Data []byte `len:"<inf>"`
+		Data []byte `size:"<inf>"`
 	}{}
 	p := newParserData(data)
 

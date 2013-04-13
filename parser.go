@@ -171,27 +171,21 @@ func (p *Parser) emitReadStruct(data interface{}) {
 			}
 
 			if len(lenkey) > 0 {
-				if lenkey == "<inf>" {
-					// read until EOF
-					buf := p.EmitReadAll()
-					if len(buf) > 0 {
-						p.readSliceFromBytes(fieldval, fieldtyp.Type, buf)
-					}
-				} else {
-					length := int(p.parseLenTag(lenkey, fieldtyp, ptrval))
-					if length > 0 {
-						p.readSliceOfLength(fieldval, length)
-					}
+				// Given the length of the slice, make a new slice and parse
+				// data into it
+				length := int(p.parseRefTag("len", lenkey, fieldtyp, ptrval))
+				if length > 0 {
+					p.readSliceOfLength(fieldval, length)
 				}
 			} else if len(sizekey) > 0 {
+				// Given the size in bytes of the slice's contents, make a new
+				// slice and parse it by appending one element at a time
 				var buf []byte
 				if sizekey == "<inf>" {
 					// read until EOF
 					buf = p.EmitReadAll()
 				} else {
-					// size := int(p.parseSizeTag(sizekey, fieldtyp, ptrval)
-					sizefield := val.FieldByName(sizekey)
-					size := p.extractInt(sizefield)
+					size := int(p.parseRefTag("size", sizekey, fieldtyp, ptrval))
 					buf = p.EmitReadNBytes(size)
 				}
 				if len(buf) > 0 {
@@ -277,27 +271,28 @@ func (p *Parser) calculatePadding(fieldtyp reflect.StructField, offset uint) uin
 	return 0
 }
 
-func (p *Parser) parseLenTag(lenstr string, fieldtyp reflect.StructField, ptrval reflect.Value) uint {
-	var length uint
-	strlen := len(lenstr)
-	if strlen > 2 && lenstr[strlen-2:] == "()" {
-		methodname := lenstr[:strlen-2]
+// Checks whether the given string refers to a field or a method on ptrval.
+func (p *Parser) parseRefTag(tag string, tagstr string, fieldtyp reflect.StructField, ptrval reflect.Value) uint {
+	var value uint
+	strlen := len(tagstr)
+	if strlen > 2 && tagstr[strlen-2:] == "()" {
+		methodname := tagstr[:strlen-2]
 		if meth, ok := fieldtyp.Type.MethodByName(methodname); ok {
 			// TODO: check signature
 			ctxval := reflect.ValueOf(p)
 			result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0]
-			length = p.extractUint(result)
+			value = p.extractUint(result)
 		} else {
-			p.RaiseError2("Method '%v()' for '%v' not found. Referenced from a `len` tag.", methodname, ptrval.Type())
+			p.RaiseError2("Method '%v()' for '%v' not found. Referenced from a `%v` tag.", methodname, ptrval.Type(), tag)
 		}
 	} else {
-		if lenfield := ptrval.Elem().FieldByName(lenstr); lenfield.Kind() != reflect.Invalid {
-			length = p.extractUint(lenfield)
+		if fieldval := ptrval.Elem().FieldByName(tagstr); fieldval.Kind() != reflect.Invalid {
+			value = p.extractUint(fieldval)
 		} else {
-			p.RaiseError2("Field '%v' for '%v %v' not found. Referenced from a `len` tag.", lenstr, fieldtyp.Name, fieldtyp.Type)
+			p.RaiseError2("Field '%v' for '%v %v' not found. Referenced from a `%v` tag.", tagstr, fieldtyp.Name, fieldtyp.Type, tag)
 		}
 	}
-	return length
+	return value
 }
 
 func (p *Parser) readSliceOfLength(fieldval reflect.Value, length int) {
