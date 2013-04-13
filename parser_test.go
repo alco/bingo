@@ -201,6 +201,21 @@ func TestBoolField(t *testing.T) {
 	}
 }
 
+func TestIgnoredField(t *testing.T) {
+	s := struct {
+		Fun func() int
+	}{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if p.offset != 0 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
 func TestEmptyLenTag(t *testing.T) {
 	s := struct {
 		Data   []byte `len:""`
