@@ -258,12 +258,14 @@ func (p *Parser) emitReadStruct(data interface{}) {
 			}
 		}
 
+		// Read any remaining padding bytes before proceeding to the next field
 		padding := p.calculatePadding(fieldtyp, offset)
 		if padding > 0 {
 			p.EmitSkipNBytes(int(padding))
 		}
 	}
 
+	// Call data's Verify() method if it defines one
 	p.callVerify(data)
 }
 
