@@ -17,7 +17,6 @@ func newParserData(data []byte) *Parser {
 	return NewParser(bytes.NewReader(data), LittleEndian, Default)
 }
 
-
 func TestNonStruct(t *testing.T) {
 	thing := 15
 	p := newParser()
@@ -218,7 +217,7 @@ func TestIgnoredField(t *testing.T) {
 
 func TestEmptyLenTag(t *testing.T) {
 	s := struct {
-		Data   []byte `len:""`
+		Data []byte `len:""`
 	}{}
 	p := newParser()
 
@@ -232,8 +231,8 @@ func TestEmptyLenTag(t *testing.T) {
 }
 
 type SizeStruct struct {
-	Size   []byte
-	Data   []byte `size:"Size"`
+	Size []byte
+	Data []byte `size:"Size"`
 }
 
 func TestGarbageSizeTag(t *testing.T) {
@@ -254,7 +253,7 @@ func TestGarbageSizeTag(t *testing.T) {
 }
 
 type LenStruct struct {
-	Data   []byte `len:"Hello()"`
+	Data []byte `len:"Hello()"`
 }
 
 func (l *LenStruct) Hello(interface{}) string {
@@ -280,7 +279,7 @@ func TestGarbageLenTag(t *testing.T) {
 
 func TestInvalidLenTag(t *testing.T) {
 	s := struct {
-		Data   []byte `len:"Lengthy"`
+		Data []byte `len:"Lengthy"`
 	}{}
 	p := newParser()
 
@@ -1063,7 +1062,6 @@ func TestPanickyMode(t *testing.T) {
 // * bool, string
 // * slice of pointers
 // * precise error reporting
-
 
 func isEqualu16(a []uint16, b []uint16) bool {
 	if len(a) != len(b) {

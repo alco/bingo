@@ -24,6 +24,7 @@ func (err *ParseError) Error() string {
 }
 
 type ByteOrder binary.ByteOrder
+
 var BigEndian = binary.BigEndian
 var LittleEndian = binary.LittleEndian
 
@@ -43,16 +44,16 @@ type Parser struct {
 
 	Tags map[string]interface{}
 
-	strict    bool
-	panicky   bool
+	strict  bool
+	panicky bool
 }
 
 func NewParser(r io.Reader, byteOrder ByteOrder, options ParseOptions) *Parser {
 	p := Parser{r: r, Tags: make(map[string]interface{}), byteOrder: byteOrder}
-	if options & Strict != 0 {
+	if options&Strict != 0 {
 		p.strict = true
 	}
-	if options & Panicky != 0 {
+	if options&Panicky != 0 {
 		p.panicky = true
 	}
 	return &p
@@ -65,7 +66,6 @@ func (p *Parser) Offset() uint {
 func (p *Parser) Context() interface{} {
 	return p.context
 }
-
 
 type Verifier interface {
 	Verify(*Parser) error
