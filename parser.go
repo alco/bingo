@@ -179,32 +179,8 @@ func (p *Parser) emitReadStruct(data interface{}) {
 					}
 				} else {
 					length := int(p.parseLenTag(lenkey, fieldtyp, ptrval))
-
 					if length > 0 {
-						// p.readSliceOfLength(length)
-
-						/*fmt.Printf("Allocating slice of length %v, type %v\n", length, fieldtyp.Type)*/
-						slice := reflect.MakeSlice(fieldtyp.Type, length, length)
-						islice := slice.Interface()
-
-						size := binary.Size(islice)
-						if size < 0 {
-							// Varsize type, need to parse each element via recursive call
-							for i := 0; i < length; i++ {
-								elem := slice.Index(i)
-								tptr := reflect.PtrTo(fieldtyp.Type.Elem())
-								ptr := reflect.New(tptr)
-								ptr.Elem().Set(elem.Addr())
-
-								p.emitReadStruct(ptr.Elem().Interface())
-							}
-						} else {
-							/*fmt.Printf("Size of the field %v is %v\n", fieldtyp.Name, size)*/
-							/*fmt.Printf("Read so far %v\n", p.offset)*/
-							// Fast path for fixed-size element type
-							p.EmitReadFixed(islice)
-						}
-						fieldval.Set(slice)
+						p.readSliceOfLength(fieldval, length)
 					}
 				}
 			} else if len(sizekey) > 0 {
@@ -322,6 +298,21 @@ func (p *Parser) parseLenTag(lenstr string, fieldtyp reflect.StructField, ptrval
 		}
 	}
 	return length
+}
+
+func (p *Parser) readSliceOfLength(fieldval reflect.Value, length int) {
+	slice := reflect.MakeSlice(fieldval.Type(), length, length)
+	islice := slice.Interface()
+	if size := binary.Size(islice); size < 0 {
+		// Varsize type, need to parse each element via recursive call
+		for i := 0; i < length; i++ {
+			elem := slice.Index(i)
+			p.emitReadStruct(buildPtr(elem))
+		}
+	} else {
+		p.EmitReadFixed(islice)
+	}
+	fieldval.Set(slice)
 }
 
 func (p *Parser) EmitReadFixed(data interface{}) bool {
