@@ -243,10 +243,10 @@ func (p *Parser) emitReadStruct(data interface{}) {
 		default:
 			// Try to read as fixed data
 			tptr := reflect.PtrTo(fieldval.Type())
-			ptr := reflect.New(tptr)
-			ptr.Elem().Set(fieldval.Addr())
+			ptrelem := reflect.New(tptr).Elem()
+			ptrelem.Set(fieldval.Addr())
 
-			if !p.EmitReadFixed(ptr.Elem().Interface()) {
+			if !p.EmitReadFixed(ptrelem.Interface()) {
 				p.RaiseError(errors.New(fmt.Sprintf("Unhandled type %v", fieldval.Kind())))
 			}
 		}
