@@ -301,7 +301,7 @@ func (p *Parser) calculatePadding(fieldtyp reflect.StructField, offset uint) uin
 func (p *Parser) parseLenTag(lenstr string, fieldtyp reflect.StructField, ptrval reflect.Value) uint {
 	var length uint
 	strlen := len(lenstr)
-	if /*strlen > 2 && */lenstr[strlen-2:] == "()" {
+	if strlen > 2 && lenstr[strlen-2:] == "()" {
 		methodname := lenstr[:strlen-2]
 		if meth, ok := fieldtyp.Type.MethodByName(methodname); ok {
 			// TODO: check signature

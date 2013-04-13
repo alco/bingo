@@ -182,6 +182,21 @@ func TestLength16Big(t *testing.T) {
 	}
 }
 
+func TestEmptyLenTag(t *testing.T) {
+	s := struct {
+		Data   []byte `len:""`
+	}{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if p.offset != 0 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
 func TestInvalidLenTag(t *testing.T) {
 	s := struct {
 		Data   []byte `len:"Lengthy"`
