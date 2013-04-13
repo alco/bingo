@@ -23,14 +23,6 @@ func (err *ParseError) Error() string {
 	return err.text
 }
 
-type Error struct {
-	Text string
-}
-
-func (err *Error) Error() string {
-	return err.Text
-}
-
 type ByteOrder binary.ByteOrder
 var BigEndian = binary.BigEndian
 var LittleEndian = binary.LittleEndian
