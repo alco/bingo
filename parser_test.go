@@ -27,7 +27,7 @@ func TestNonStruct(t *testing.T) {
 			t.Error("Incorrect error:", err)
 		}
 	} else {
-		t.Fail()
+		t.Error()
 	}
 }
 
@@ -40,7 +40,7 @@ func TestNonPointer(t *testing.T) {
 			t.Error("Incorrect error:", err)
 		}
 	} else {
-		t.Fail()
+		t.Error()
 	}
 }
 
@@ -68,7 +68,7 @@ func TestPtrField(t *testing.T) {
 			t.Error("Incorrect error:", err)
 		}
 	} else {
-		t.Fail()
+		t.Error()
 	}
 
 	if p.offset != 0 {
@@ -208,7 +208,7 @@ func TestInvalidLenTag(t *testing.T) {
 			t.Error("Incorrect error:", err)
 		}
 	} else {
-		t.Fail()
+		t.Error()
 	}
 
 	if p.offset != 0 {
@@ -230,7 +230,7 @@ func TestInvalidLenFuncTag(t *testing.T) {
 			t.Error("Incorrect error:", err)
 		}
 	} else {
-		t.Fail()
+		t.Error()
 	}
 
 	if p.offset != 1 {
@@ -529,7 +529,7 @@ func TestInvalidPadding(t *testing.T) {
 			t.Error("Incorrect error:", err)
 		}
 	} else {
-		t.Fail()
+		t.Error()
 	}
 
 	if p.offset != 0 {
@@ -888,7 +888,7 @@ func TestConflictingTags(t *testing.T) {
 			t.Error("Incorrect error:", err)
 		}
 	} else {
-		t.Fail()
+		t.Error()
 	}
 	if p.offset != 0 {
 		t.Error("Invalid offset:", p.offset)
@@ -929,7 +929,7 @@ func TestVerifyDetect(t *testing.T) {
 			t.Error("Incorrect error:", err)
 		}
 	} else {
-		t.Fail()
+		t.Error()
 	}
 
 	if p.offset != 0 {
@@ -963,7 +963,7 @@ func TestStrictMode(t *testing.T) {
 			t.Error("Incorrect error:", err)
 		}
 	} else {
-		t.Fail()
+		t.Error()
 	}
 
 	if p.offset != 0 {
