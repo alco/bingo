@@ -217,6 +217,7 @@ func (p *Parser) emitReadStruct(data interface{}) {
 					// read until EOF
 					buf = p.EmitReadAll()
 				} else {
+					// size := int(p.parseSizeTag(sizekey, fieldtyp, ptrval)
 					sizefield := val.FieldByName(sizekey)
 					size := p.extractInt(sizefield)
 					buf = p.EmitReadNBytes(size)
@@ -235,6 +236,9 @@ func (p *Parser) emitReadStruct(data interface{}) {
 
 		case reflect.Func:
 			// Ignore functions
+
+		case reflect.Bool, reflect.Chan, reflect.Map, reflect.String, reflect.UnsafePointer:
+			p.RaiseError2("Error reading field '%v %v'. Type not supported.", fieldtyp.Name, fieldtyp.Type)
 
 		default:
 			// Try to read as fixed data

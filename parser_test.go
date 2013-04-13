@@ -182,6 +182,25 @@ func TestLength16Big(t *testing.T) {
 	}
 }
 
+func TestBoolField(t *testing.T) {
+	s := struct {
+		F bool
+	}{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Error reading field 'F bool'. Type not supported." {
+			t.Error("Incorrect error:", err)
+		}
+	} else {
+		t.Error()
+	}
+
+	if p.offset != 0 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
 func TestEmptyLenTag(t *testing.T) {
 	s := struct {
 		Data   []byte `len:""`
