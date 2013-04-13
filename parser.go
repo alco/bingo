@@ -182,23 +182,11 @@ func (p *Parser) emitReadStruct(data interface{}) {
 						p.readSliceFromBytes(fieldval, fieldtyp.Type, buf)
 					}
 				} else {
-					var length int
-
-					if len(lenkey) > 2 && lenkey[len(lenkey)-1] == ')' && lenkey[len(lenkey)-2] == '(' {
-						methodname := lenkey[:len(lenkey)-2]
-						if meth, ok := ptrtyp.MethodByName(methodname); ok {
-							ctxval := reflect.ValueOf(p)
-							result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0]
-							length = p.extractInt(result)
-						} else {
-							p.RaiseError(errors.New(fmt.Sprintf("Method with name %v not found", methodname)))
-						}
-					} else {
-						lenfield := val.FieldByName(lenkey)
-						length = p.extractInt(lenfield)
-					}
+					length := int(p.parseLenTag(lenkey, fieldtyp, ptrval))
 
 					if length > 0 {
+						// p.readSliceOfLength(length)
+
 						/*fmt.Printf("Allocating slice of length %v, type %v\n", length, fieldtyp.Type)*/
 						slice := reflect.MakeSlice(fieldtyp.Type, length, length)
 						islice := slice.Interface()
@@ -308,6 +296,29 @@ func (p *Parser) calculatePadding(fieldtyp reflect.StructField, offset uint) uin
 		}
 	}
 	return 0
+}
+
+func (p *Parser) parseLenTag(lenstr string, fieldtyp reflect.StructField, ptrval reflect.Value) uint {
+	var length uint
+	strlen := len(lenstr)
+	if /*strlen > 2 && */lenstr[strlen-2:] == "()" {
+		methodname := lenstr[:strlen-2]
+		if meth, ok := fieldtyp.Type.MethodByName(methodname); ok {
+			// TODO: check signature
+			ctxval := reflect.ValueOf(p)
+			result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0]
+			length = p.extractUint(result)
+		} else {
+			p.RaiseError2("Method '%v()' for '%v' not found. Referenced from a `len` tag.", methodname, ptrval.Type())
+		}
+	} else {
+		if lenfield := ptrval.Elem().FieldByName(lenstr); lenfield.Kind() != reflect.Invalid {
+			length = p.extractUint(lenfield)
+		} else {
+			p.RaiseError2("Field '%v' for '%v %v' not found. Referenced from a `len` tag.", lenstr, fieldtyp.Name, fieldtyp.Type)
+		}
+	}
+	return length
 }
 
 func (p *Parser) EmitReadFixed(data interface{}) bool {

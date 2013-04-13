@@ -182,6 +182,47 @@ func TestLength16Big(t *testing.T) {
 	}
 }
 
+func TestInvalidLenTag(t *testing.T) {
+	s := struct {
+		Data   []byte `len:"Lengthy"`
+	}{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Field 'Lengthy' for 'Data []uint8' not found. Referenced from a `len` tag." {
+			t.Error("Incorrect error:", err)
+		}
+	} else {
+		t.Fail()
+	}
+
+	if p.offset != 0 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
+type InvalidLenStruct struct {
+	Length int8
+	Data   []byte `len:"Length()"`
+}
+
+func TestInvalidLenFuncTag(t *testing.T) {
+	s := InvalidLenStruct{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Method 'Length()' for '*bingo.InvalidLenStruct' not found. Referenced from a `len` tag." {
+			t.Error("Incorrect error:", err)
+		}
+	} else {
+		t.Fail()
+	}
+
+	if p.offset != 1 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
 func TestSliceByte(t *testing.T) {
 	s := struct {
 		Length uint16
