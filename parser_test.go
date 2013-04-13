@@ -821,6 +821,24 @@ func TestUnkownLengthSlice(t *testing.T) {
 	}
 }
 
+func TestConflictingTags(t *testing.T) {
+	s := struct {
+		Data []byte `len:"Length" size:"Size"`
+	}{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Error parsing field 'Data []uint8'. Can't have both `len` and `size` tags on the same field." {
+			t.Error("Incorrect error:", err)
+		}
+	} else {
+		t.Fail()
+	}
+	if p.offset != 0 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
 func TestReadUntilEOF(t *testing.T) {
 	data := []byte("Hello world!")
 	s := struct {

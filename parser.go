@@ -132,6 +132,8 @@ func (p *Parser) emitReadStruct(data interface{}) {
 	ptrval := reflect.ValueOf(data)
 	val := ptrval.Elem()
 
+	// Iterate over each field checking its tags and choosing the best way to
+	// read into it
 	nfields := typ.NumField()
 	for fieldIdx := 0; fieldIdx < nfields; fieldIdx++ {
 		fieldtyp := typ.Field(fieldIdx)
@@ -159,13 +161,20 @@ func (p *Parser) emitReadStruct(data interface{}) {
 			// Construct a pointer to the given field
 			// and pass it to a recursive call
 			tptr := reflect.PtrTo(fieldtyp.Type)
-			ptr := reflect.New(tptr)
-			ptr.Elem().Set(fieldval.Addr())
+			ptrelem := reflect.New(tptr).Elem()
+			ptrelem.Set(fieldval.Addr())
 
-			p.emitReadStruct(ptr.Elem().Interface())
+			p.emitReadStruct(ptrelem.Interface())
 
 		case reflect.Slice:
-			if lenkey := fieldtyp.Tag.Get("len"); len(lenkey) > 0 {
+			// Determine the length or the size of the slice
+			lenkey := fieldtyp.Tag.Get("len")
+			sizekey := fieldtyp.Tag.Get("size")
+			if len(lenkey) > 0 && len(sizekey) > 0 {
+				p.RaiseError2("Error parsing field '%v %v'. Can't have both `len` and `size` tags on the same field.", fieldtyp.Name, fieldtyp.Type)
+			}
+
+			if len(lenkey) > 0 {
 				if lenkey == "<inf>" {
 					// read until EOF
 					buf := p.EmitReadAll()
@@ -214,7 +223,7 @@ func (p *Parser) emitReadStruct(data interface{}) {
 						fieldval.Set(slice)
 					}
 				}
-			} else if sizekey := fieldtyp.Tag.Get("size"); len(sizekey) > 0 {
+			} else if len(sizekey) > 0 {
 				var buf []byte
 				if sizekey == "<inf>" {
 					// read until EOF
