@@ -841,7 +841,6 @@ func TestReadUntilEOF(t *testing.T) {
 }
 
 type WrongVerifier struct {
-	dummy uint32
 }
 
 func (w *WrongVerifier) Verify() {
@@ -852,24 +851,41 @@ func TestVerifyDetect(t *testing.T) {
 	p := newParser()
 
 	if err := p.EmitReadStruct(&s); err != nil {
-		if _, ok := err.(interface{Error() string}); !ok {
-			t.Error(err)
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Type *bingo.WrongVerifier has a Verify() method with incorrect signature. Expected: Verify(p *bingo.Parser) error." {
+			t.Error("Incorrect error:", err)
 		}
 	} else {
-		t.Error("Didn't fail on wrong Verify() method")
+		t.Fail()
 	}
 
 	if p.offset != 0 {
-		t.Error("Invalid offset after parsing wrong verifier", p.offset)
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
+type Unexported struct {
+	dummy FixedSizeStruct
+}
+
+func TestNonStrictMode(t *testing.T) {
+	s := Unexported{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if p.offset != 0 {
+		t.Error("Invalid offset:", p.offset)
 	}
 }
 
 func TestStrictMode(t *testing.T) {
-	s := WrongVerifier{}
+	s := Unexported{}
 	p := NewParser(nil, BigEndian, Strict)
 
 	if err := p.EmitReadStruct(&s); err != nil {
-		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Unable to parse into 'dummy uint32'. Unexported fields are not supported." {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Unable to parse into 'dummy bingo.FixedSizeStruct'. Unexported fields are not supported." {
 			t.Error("Incorrect error:", err)
 		}
 	} else {

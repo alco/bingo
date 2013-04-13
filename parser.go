@@ -90,7 +90,7 @@ func (p *Parser) callVerify(data interface{}) {
 		typ := reflect.TypeOf(data)
 		if typ != nil {
 			if _, ok := typ.MethodByName("Verify"); ok {
-				p.RaiseError(&Error{fmt.Sprintf("Type %v has a Verify method with incorrect signature. Expected Verify(p *bingo.Parser) error", typ)})
+				p.RaiseError2("Type %v has a Verify() method with incorrect signature. Expected: Verify(p *bingo.Parser) error.", typ)
 			}
 		}
 	}
@@ -147,6 +147,15 @@ func (p *Parser) emitReadStruct(data interface{}) {
 
 		if !p.ifTagSatisfied(fieldtyp, ptrtyp, ptrval) {
 			continue
+		}
+
+		if len(fieldtyp.PkgPath) > 0 {
+			// unexported field. skip it
+			if p.strict {
+				p.RaiseError2("Unable to parse into '%v %v'. Unexported fields are not supported.", fieldtyp.Name, fieldtyp.Type)
+			} else {
+				continue
+			}
 		}
 
 		// Remember current offset to calculate padded bytes after reading
@@ -239,15 +248,6 @@ func (p *Parser) emitReadStruct(data interface{}) {
 			// Ignore functions
 
 		default:
-			if len(fieldtyp.PkgPath) > 0 {
-				// unexported field. skip it
-				if p.strict {
-					p.RaiseError2("Unable to parse into '%v %v'. Unexported fields are not supported.", fieldtyp.Name, fieldtyp.Type)
-				} else {
-					continue
-				}
-			}
-
 			// Try to read as fixed data
 			tptr := reflect.PtrTo(fieldval.Type())
 			ptr := reflect.New(tptr)
