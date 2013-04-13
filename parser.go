@@ -196,12 +196,11 @@ func (p *Parser) emitReadStruct(data interface{}) {
 				p.EmitReadFixed(fieldval.Interface())
 			}
 
+		case reflect.Func:
+			// Ignore functions
 
 		case reflect.Ptr:
 			p.RaiseError2("Error reading field '%v %v'. Pointer fields are not supported.", fieldtyp.Name, fieldtyp.Type)
-
-		case reflect.Func:
-			// Ignore functions
 
 		case reflect.Bool, reflect.Chan, reflect.Map, reflect.String, reflect.UnsafePointer:
 			p.RaiseError2("Error reading field '%v %v'. Type not supported.", fieldtyp.Name, fieldtyp.Type)
