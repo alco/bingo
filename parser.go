@@ -160,11 +160,7 @@ func (p *Parser) emitReadStruct(data interface{}) {
 		case reflect.Struct:
 			// Construct a pointer to the given field
 			// and pass it to a recursive call
-			tptr := reflect.PtrTo(fieldtyp.Type)
-			ptrelem := reflect.New(tptr).Elem()
-			ptrelem.Set(fieldval.Addr())
-
-			p.emitReadStruct(ptrelem.Interface())
+			p.emitReadStruct(buildPtr(fieldval))
 
 		case reflect.Slice:
 			// Determine the length or the size of the slice
@@ -242,11 +238,7 @@ func (p *Parser) emitReadStruct(data interface{}) {
 
 		default:
 			// Try to read as fixed data
-			tptr := reflect.PtrTo(fieldval.Type())
-			ptrelem := reflect.New(tptr).Elem()
-			ptrelem.Set(fieldval.Addr())
-
-			if !p.EmitReadFixed(ptrelem.Interface()) {
+			if !p.EmitReadFixed(buildPtr(fieldval)) {
 				p.RaiseError(errors.New(fmt.Sprintf("Unhandled type %v", fieldval.Kind())))
 			}
 		}
@@ -260,6 +252,13 @@ func (p *Parser) emitReadStruct(data interface{}) {
 
 	// Call data's Verify() method if it defines one
 	p.callVerify(data)
+}
+
+func buildPtr(val reflect.Value) interface{} {
+	tptr := reflect.PtrTo(val.Type())
+	ptrelem := reflect.New(tptr).Elem()
+	ptrelem.Set(val.Addr())
+	return ptrelem.Interface()
 }
 
 func (p *Parser) ifTagSatisfied(fieldtyp reflect.StructField, ptrtyp reflect.Type, ptrval reflect.Value) bool {
