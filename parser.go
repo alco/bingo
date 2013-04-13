@@ -273,20 +273,28 @@ func (p *Parser) calculatePadding(fieldtyp reflect.StructField, offset uint) uin
 // Checks whether the given string refers to a field or a method on ptrval.
 func (p *Parser) parseRefTag(tag string, tagstr string, fieldtyp reflect.StructField, ptrval reflect.Value) uint {
 	var value uint
+	var err error
+
 	strlen := len(tagstr)
 	if strlen > 2 && tagstr[strlen-2:] == "()" {
 		methodname := tagstr[:strlen-2]
-		if meth, ok := fieldtyp.Type.MethodByName(methodname); ok {
+		if meth, ok := ptrval.Type().MethodByName(methodname); ok {
 			// TODO: check signature
 			ctxval := reflect.ValueOf(p)
 			result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0]
-			value = p.extractUint(result)
+			value, err = p.extractUint(result)
+			if err != nil {
+				p.RaiseError2("Error trying to parse '%v' as an integer. Referenced from a `%v` tag in '%v'.", result, tag, ptrval.Type())
+			}
 		} else {
 			p.RaiseError2("Method '%v()' for '%v' not found. Referenced from a `%v` tag.", methodname, ptrval.Type(), tag)
 		}
 	} else {
 		if fieldval := ptrval.Elem().FieldByName(tagstr); fieldval.Kind() != reflect.Invalid {
-			value = p.extractUint(fieldval)
+			value, err = p.extractUint(fieldval)
+			if err != nil {
+				p.RaiseError2("Error trying to parse '%v' as an integer. Referenced from a `%v` tag in '%v'.", fieldval, tag, ptrval.Type())
+			}
 		} else {
 			p.RaiseError2("Field '%v' for '%v %v' not found. Referenced from a `%v` tag.", tagstr, fieldtyp.Name, fieldtyp.Type, tag)
 		}
@@ -398,26 +406,12 @@ func (p *Parser) RaiseError2(msg string, args ...interface{}) {
 	panic(parseError(fmt.Sprintf(msg, args...)))
 }
 
-func (p *Parser) extractInt(val reflect.Value) int {
+func (p *Parser) extractUint(val reflect.Value) (uint, error) {
 	switch val.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return int(val.Int())
+		return uint(val.Int()), nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return int(val.Uint())
-	default:
-		p.RaiseError(errors.New("Unsupported type for length spec. Only integers are supported."))
+		return uint(val.Uint()), nil
 	}
-	return 0
-}
-
-func (p *Parser) extractUint(val reflect.Value) uint {
-	switch val.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return uint(val.Int())
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return uint(val.Uint())
-	default:
-		p.RaiseError(errors.New("Unsupported type for size spec. Only integers are supported."))
-	}
-	return 0
+	return 0, errors.New("")
 }

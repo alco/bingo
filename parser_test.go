@@ -231,6 +231,53 @@ func TestEmptyLenTag(t *testing.T) {
 	}
 }
 
+type SizeStruct struct {
+	Size   []byte
+	Data   []byte `size:"Size"`
+}
+
+func TestGarbageSizeTag(t *testing.T) {
+	s := SizeStruct{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Error trying to parse '<[]uint8 Value>' as an integer. Referenced from a `size` tag in '*bingo.SizeStruct'." {
+			t.Error("Incorrect error:", err)
+		}
+	} else {
+		t.Error()
+	}
+
+	if p.offset != 0 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
+type LenStruct struct {
+	Data   []byte `len:"Hello()"`
+}
+
+func (l *LenStruct) Hello(interface{}) string {
+	return "hello"
+}
+
+func TestGarbageLenTag(t *testing.T) {
+	s := LenStruct{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Error trying to parse 'hello' as an integer. Referenced from a `len` tag in '*bingo.LenStruct'." {
+			t.Error("Incorrect error:", err)
+		}
+	} else {
+		t.Error()
+	}
+
+	if p.offset != 0 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
 func TestInvalidLenTag(t *testing.T) {
 	s := struct {
 		Data   []byte `len:"Lengthy"`
