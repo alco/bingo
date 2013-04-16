@@ -216,7 +216,7 @@ func (p *Parser) emitReadStruct(data interface{}) {
 				}
 			} else {
 				// Length for the slice not specified. Try parsing it as is.
-				p.EmitReadFixed(fieldval.Interface())
+				p.EmitReadFixed(fieldval.Interface(), fieldtyp, ptrval)
 			}
 
 		case reflect.Func:
@@ -230,7 +230,7 @@ func (p *Parser) emitReadStruct(data interface{}) {
 
 		default:
 			// Try to read as fixed data
-			if !p.EmitReadFixed(buildPtr(fieldval)) {
+			if !p.EmitReadFixed(buildPtr(fieldval), fieldtyp, ptrval) {
 				p.RaiseError(errors.New(fmt.Sprintf("Unhandled type %v", fieldval.Kind())))
 			}
 		}
@@ -271,6 +271,8 @@ func (p *Parser) ifTagSatisfied(fieldtyp reflect.StructField, ptrtyp reflect.Typ
 				// Skip this field
 				return false
 			}
+		} else {
+			p.RaiseError2("Method %v on %v not found.", ifstr, ptrtyp)
 		}
 	}
 	return true
@@ -325,7 +327,7 @@ func (p *Parser) parseRefTag(tag string, tagstr string, fieldtyp reflect.StructF
 	return value
 }
 
-func (p *Parser) readSliceOfLength(fieldval reflect.Value, length int) {
+func (p *Parser) readSliceOfLength(fieldval reflect.Value, length int, fieldtyp reflect.StructField, ptrval reflect.Value) {
 	slice := reflect.MakeSlice(fieldval.Type(), length, length)
 	islice := slice.Interface()
 	if size := binary.Size(islice); size < 0 {
@@ -335,26 +337,25 @@ func (p *Parser) readSliceOfLength(fieldval reflect.Value, length int) {
 			p.emitReadStruct(buildPtr(elem))
 		}
 	} else {
-		p.EmitReadFixed(islice)
+		p.EmitReadFixed(islice, fieldtyp, ptrval)
 	}
 	fieldval.Set(slice)
 }
 
-func (p *Parser) EmitReadFixed(data interface{}) bool {
+func (p *Parser) EmitReadFixed(data interface{}, fieldtyp reflect.StructField, ptrval reflect.Value) bool {
 	size := binary.Size(data)
 	if size < 0 {
 		return false
 	}
 
-	p.EmitReadFixedFast(data, size)
+	p.EmitReadFixedFast(data, size, fieldtyp, ptrval)
 	return true
 }
 
-func (p *Parser) EmitReadFixedFast(data interface{}, size int) {
+func (p *Parser) EmitReadFixedFast(data interface{}, size int, fieldtyp reflect.StructField, ptrval reflect.Value) {
 	err := binary.Read(p.r, p.byteOrder, data)
 	if err != nil {
-		/*p.RaiseError(err)*/
-		p.RaiseError(errors.New(fmt.Sprintf("%v while reading of size %v", err, size)))
+		p.RaiseError2("%v while reading %v bytes into '%v %v' of %v", err, size, fieldtyp.Name, fieldtyp.Type, ptrval.Elem().Type())
 	}
 	p.offset += uint(size)
 }
