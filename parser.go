@@ -73,7 +73,6 @@ type Verifier interface {
 
 func (p *Parser) callVerify(data interface{}) {
 	if dat, ok := data.(Verifier); ok {
-		/*fmt.Printf(">>>>Verifying %v\n", reflect.TypeOf(data))*/
 		err := dat.Verify(p)
 		if err != nil {
 			p.RaiseError(err)
