@@ -155,16 +155,40 @@ func (p *Parser) emitReadStruct(data interface{}) {
 		// current field
 		offset := p.offset
 
+		sizekey := fieldtyp.Tag.Get("size")
 		switch fieldval.Kind() {
 		case reflect.Struct:
 			// Construct a pointer to the given field
 			// and pass it to a recursive call
+			var (
+				tmp_r io.Reader
+			    limit_r io.LimitedReader
+			    size int
+			)
+			if len(sizekey) > 0 {
+				if sizekey == "<inf>" {
+					p.RaiseError2("Invalid `size` tag value while parsing '%v %v'. Can only use \"<inf>\" with slices.", fieldtyp.Name, fieldtyp.Type)
+				} else {
+					size = int(p.parseRefTag("size", sizekey, fieldtyp, ptrval))
+					if size > 0 {
+						tmp_r, limit_r = p.r, io.LimitedReader{p.r, int64(size)}
+						p.r = &limit_r
+					}
+				}
+			}
+
 			p.emitReadStruct(buildPtr(fieldval))
+
+			if size > 0 {
+				if limit_r.N != 0 {
+					p.RaiseError2("Error reading exactly %v bytes into '%v %v' of %v. Actual bytes read: %v", size, fieldtyp.Name, fieldtyp.Type, ptrval.Elem().Type(), int64(size) - limit_r.N)
+				}
+				p.r = tmp_r
+			}
 
 		case reflect.Slice:
 			// Determine the length or the size of the slice
 			lenkey := fieldtyp.Tag.Get("len")
-			sizekey := fieldtyp.Tag.Get("size")
 			if len(lenkey) > 0 && len(sizekey) > 0 {
 				p.RaiseError2("Error parsing field '%v %v'. Can't have both `len` and `size` tags on the same field.", fieldtyp.Name, fieldtyp.Type)
 			}

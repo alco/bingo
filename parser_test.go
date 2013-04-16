@@ -252,6 +252,60 @@ func TestGarbageSizeTag(t *testing.T) {
 	}
 }
 
+type Embedded struct {
+	Value int16
+	Data []byte `size:"<inf>"`
+}
+
+func TestNonSliceInfSizeTag(t *testing.T) {
+	data := []byte{255, 255, 255, 255}
+	s := struct {
+		Length uint32
+		Embedded `size:"<inf>"`
+	}{}
+	p := newParserData(data)
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Invalid `size` tag value while parsing 'Embedded bingo.Embedded'. Can only use \"<inf>\" with slices." {
+			t.Error("Incorrect error:", err)
+		}
+	} else {
+		t.Error()
+	}
+
+	if p.offset != 4 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
+func TestNonSliceSizeTag(t *testing.T) {
+	data := []byte{6, 0, 0, 0,
+				   0xA, 0xB,
+				   'a', 'b', 'c', 'd'}
+	s := struct {
+		Length uint32
+		Embedded `size:"Length"`
+	}{}
+	p := newParserData(data)
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if s.Length != 6 {
+		t.Error("Invalid Length:", s.Length)
+	}
+	if s.Value != 0xB0A {
+		t.Error("Invalid Value:", s.Value)
+	}
+	if string(s.Data[:]) != "abcd" {
+		t.Error("Error parsing embedded data:", s.Data)
+	}
+	if p.offset != 10 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
 type LenStruct struct {
 	Data []byte `len:"Hello()"`
 }
