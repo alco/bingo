@@ -160,31 +160,7 @@ func (p *Parser) emitReadStruct(data interface{}) {
 		case reflect.Struct:
 			// Construct a pointer to the given field
 			// and pass it to a recursive call
-			var (
-				tmp_r io.Reader
-			    limit_r io.LimitedReader
-			    size int
-			)
-			if len(sizekey) > 0 {
-				if sizekey == "<inf>" {
-					p.RaiseError2("Invalid `size` tag value while parsing '%v %v'. Can only use \"<inf>\" with slices.", fieldtyp.Name, fieldtyp.Type)
-				} else {
-					size = int(p.parseRefTag("size", sizekey, fieldtyp, ptrval))
-					if size > 0 {
-						tmp_r, limit_r = p.r, io.LimitedReader{p.r, int64(size)}
-						p.r = &limit_r
-					}
-				}
-			}
-
-			p.emitReadStruct(buildPtr(fieldval))
-
-			if size > 0 {
-				if limit_r.N != 0 {
-					p.RaiseError2("Error reading exactly %v bytes into '%v %v' of %v. Actual bytes read: %v", size, fieldtyp.Name, fieldtyp.Type, ptrval.Elem().Type(), int64(size) - limit_r.N)
-				}
-				p.r = tmp_r
-			}
+			p.readFieldOfLimitedSize("size", sizekey, fieldval, fieldtyp, ptrval, -1)
 
 		case reflect.Slice:
 			// Determine the length or the size of the slice
@@ -193,12 +169,13 @@ func (p *Parser) emitReadStruct(data interface{}) {
 				p.RaiseError2("Error parsing field '%v %v'. Can't have both `len` and `size` tags on the same field.", fieldtyp.Name, fieldtyp.Type)
 			}
 
+			elemsizekey := fieldtyp.Tag.Get("elemsize")
 			if len(lenkey) > 0 {
 				// Given the length of the slice, make a new slice and parse
 				// data into it
-				length := int(p.parseRefTag("len", lenkey, fieldtyp, ptrval))
+				length := int(p.parseRefTag("len", lenkey, fieldtyp, ptrval, -1))
 				if length > 0 {
-					p.readSliceOfLength(fieldval, length)
+					p.readSliceOfLength(fieldval, length, fieldtyp, ptrval, elemsizekey)
 				}
 			} else if len(sizekey) > 0 {
 				// Given the size in bytes of the slice's contents, make a new
@@ -208,7 +185,7 @@ func (p *Parser) emitReadStruct(data interface{}) {
 					// read until EOF
 					buf = p.EmitReadAll()
 				} else {
-					size := int(p.parseRefTag("size", sizekey, fieldtyp, ptrval))
+					size := int(p.parseRefTag("size", sizekey, fieldtyp, ptrval, -1))
 					buf = p.EmitReadNBytes(size)
 				}
 				if len(buf) > 0 {
@@ -296,7 +273,7 @@ func (p *Parser) calculatePadding(fieldtyp reflect.StructField, offset uint) uin
 }
 
 // Checks whether the given string refers to a field or a method on ptrval.
-func (p *Parser) parseRefTag(tag string, tagstr string, fieldtyp reflect.StructField, ptrval reflect.Value) uint {
+func (p *Parser) parseRefTag(tag string, tagstr string, fieldtyp reflect.StructField, ptrval reflect.Value, index int) uint {
 	var value uint
 	var err error
 
@@ -306,7 +283,13 @@ func (p *Parser) parseRefTag(tag string, tagstr string, fieldtyp reflect.StructF
 		if meth, ok := ptrval.Type().MethodByName(methodname); ok {
 			// TODO: check signature
 			ctxval := reflect.ValueOf(p)
-			result := meth.Func.Call([]reflect.Value{ptrval, ctxval})[0]
+			var result reflect.Value
+			if index >= 0 {
+				indexval := reflect.ValueOf(index)
+				result = meth.Func.Call([]reflect.Value{ptrval, ctxval, indexval})[0]
+			} else {
+				result = meth.Func.Call([]reflect.Value{ptrval, ctxval})[0]
+			}
 			value, err = p.extractUint(result)
 			if err != nil {
 				p.RaiseError2("Error trying to parse '%v' as an integer. Referenced from a `%v` tag in '%v'.", result, tag, ptrval.Type())
@@ -327,14 +310,13 @@ func (p *Parser) parseRefTag(tag string, tagstr string, fieldtyp reflect.StructF
 	return value
 }
 
-func (p *Parser) readSliceOfLength(fieldval reflect.Value, length int, fieldtyp reflect.StructField, ptrval reflect.Value) {
+func (p *Parser) readSliceOfLength(fieldval reflect.Value, length int, fieldtyp reflect.StructField, ptrval reflect.Value, elemsizekey string) {
 	slice := reflect.MakeSlice(fieldval.Type(), length, length)
 	islice := slice.Interface()
 	if size := binary.Size(islice); size < 0 {
-		// Varsize type, need to parse each element via recursive call
 		for i := 0; i < length; i++ {
 			elem := slice.Index(i)
-			p.emitReadStruct(buildPtr(elem))
+			p.readFieldOfLimitedSize("elemsize", elemsizekey, elem, fieldtyp, ptrval, i)
 		}
 	} else {
 		p.EmitReadFixed(islice, fieldtyp, ptrval)
@@ -387,6 +369,34 @@ func (p *Parser) EmitReadAll() []byte {
 func (p *Parser) EmitSkipNBytes(nbytes int) {
 	// FIXME: remove unbounded allocation
 	p.EmitReadNBytes(nbytes)
+}
+
+func (p *Parser) readFieldOfLimitedSize(tag, tagstr string, val reflect.Value, fieldtyp reflect.StructField, ptrval reflect.Value, index int) {
+	var (
+		tmp_r io.Reader
+		limit_r io.LimitedReader
+		size int
+	)
+	if len(tagstr) > 0 {
+		if tagstr == "<inf>" {
+			p.RaiseError2("Invalid `%v` tag value while parsing '%v %v'. Can only use \"<inf>\" with slices.", tag, fieldtyp.Name, fieldtyp.Type)
+		} else {
+			size = int(p.parseRefTag(tag, tagstr, fieldtyp, ptrval, index))
+			if size > 0 {
+				tmp_r, limit_r = p.r, io.LimitedReader{p.r, int64(size)}
+				p.r = &limit_r
+			}
+		}
+	}
+
+	p.emitReadStruct(buildPtr(val))
+
+	if size > 0 {
+		if limit_r.N != 0 {
+			p.RaiseError2("Error reading exactly %v bytes into '%v %v' of %v. Actual bytes read: %v", size, fieldtyp.Name, fieldtyp.Type, ptrval.Elem().Type(), int64(size) - limit_r.N)
+		}
+		p.r = tmp_r
+	}
 }
 
 func (p *Parser) readSliceFromBytes(val reflect.Value, typ reflect.Type, buf []byte) {
