@@ -158,8 +158,6 @@ func (p *Parser) emitReadStruct(data interface{}) {
 		sizekey := fieldtyp.Tag.Get("size")
 		switch fieldval.Kind() {
 		case reflect.Struct:
-			// Construct a pointer to the given field
-			// and pass it to a recursive call
 			p.readFieldOfLimitedSize("size", sizekey, fieldval, fieldtyp, ptrval, -1)
 
 		case reflect.Slice:
