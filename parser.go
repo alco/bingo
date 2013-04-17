@@ -373,9 +373,9 @@ func (p *Parser) EmitSkipNBytes(nbytes int) {
 
 func (p *Parser) readFieldOfLimitedSize(tag, tagstr string, val reflect.Value, fieldtyp reflect.StructField, ptrval reflect.Value, index int) {
 	var (
-		tmp_r io.Reader
+		tmp_r   io.Reader
 		limit_r io.LimitedReader
-		size int
+		size    int
 	)
 	if len(tagstr) > 0 {
 		if tagstr == "<inf>" {
@@ -393,7 +393,7 @@ func (p *Parser) readFieldOfLimitedSize(tag, tagstr string, val reflect.Value, f
 
 	if size > 0 {
 		if limit_r.N != 0 {
-			p.RaiseError2("Error reading exactly %v bytes into '%v %v' of %v. Actual bytes read: %v", size, fieldtyp.Name, fieldtyp.Type, ptrval.Elem().Type(), int64(size) - limit_r.N)
+			p.RaiseError2("Error reading exactly %v bytes into '%v %v' of %v. Actual bytes read: %v", size, fieldtyp.Name, fieldtyp.Type, ptrval.Elem().Type(), int64(size)-limit_r.N)
 		}
 		p.r = tmp_r
 	}

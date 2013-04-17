@@ -254,13 +254,13 @@ func TestGarbageSizeTag(t *testing.T) {
 
 type Embedded struct {
 	Value int16
-	Data []byte `size:"<inf>"`
+	Data  []byte `size:"<inf>"`
 }
 
 func TestNonSliceInfSizeTag(t *testing.T) {
 	data := []byte{255, 255, 255, 255}
 	s := struct {
-		Length uint32
+		Length   uint32
 		Embedded `size:"<inf>"`
 	}{}
 	p := newParserData(data)
@@ -280,10 +280,10 @@ func TestNonSliceInfSizeTag(t *testing.T) {
 
 func TestNonSliceSizeTag(t *testing.T) {
 	data := []byte{6, 0, 0, 0,
-				   0xA, 0xB,
-				   'a', 'b', 'c', 'd'}
+		0xA, 0xB,
+		'a', 'b', 'c', 'd'}
 	s := struct {
-		Length uint32
+		Length   uint32
 		Embedded `size:"Length"`
 	}{}
 	p := newParserData(data)
@@ -302,6 +302,41 @@ func TestNonSliceSizeTag(t *testing.T) {
 		t.Error("Error parsing embedded data:", s.Data)
 	}
 	if p.offset != 10 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
+type InfSizeStruct struct {
+	Empty []byte
+	Data  []byte `size:"<inf>"`
+}
+
+type ElemSizeStruct struct {
+	Length uint8
+	Slice  []InfSizeStruct `len:"Length" elemsize:"Size()"`
+}
+
+func (e *ElemSizeStruct) Size(p *Parser, index int) int {
+	return index + 1
+}
+
+func TestElemsizeTag(t *testing.T) {
+	data := []byte{3, 'a', 'a', 'b', 'a', 'b', 'c'}
+	s := ElemSizeStruct{}
+	p := newParserData(data)
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if len(s.Slice) != 3 {
+		t.Fatal("Invalid slice length:", len(s.Slice))
+	}
+	if !(string(s.Slice[0].Data) == "a" && string(s.Slice[1].Data) == "ab" && string(s.Slice[2].Data) == "abc" &&
+		len(s.Slice[0].Empty) == 0 && len(s.Slice[1].Empty) == 0 && len(s.Slice[2].Empty) == 0) {
+		t.Error("Error parsing variable elem size:", s.Slice)
+	}
+	if p.offset != 7 {
 		t.Error("Invalid offset:", p.offset)
 	}
 }
