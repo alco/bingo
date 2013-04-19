@@ -1,5 +1,7 @@
 package bingo
 
+// FIXME: add a test for error reading when size == 0
+
 import (
 	"bytes"
 	"errors"

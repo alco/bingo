@@ -41,6 +41,7 @@ type Parser struct {
 	byteOrder binary.ByteOrder
 	offset    uint
 	context   interface{}
+	depth     int
 
 	Tags map[string]interface{}
 
@@ -73,6 +74,7 @@ type Verifier interface {
 
 func (p *Parser) callVerify(data interface{}) {
 	if dat, ok := data.(Verifier); ok {
+		fmt.Printf("Calling Verify on %v\n", reflect.TypeOf(data))
 		err := dat.Verify(p)
 		if err != nil {
 			p.RaiseError(err)
@@ -118,6 +120,8 @@ func (p *Parser) EmitReadStruct(data interface{}) (err error) {
 }
 
 func (p *Parser) emitReadStruct(data interface{}) {
+	p.depth++
+
 	// Initial sanity checks
 	ptrtyp := reflect.TypeOf(data)
 	if ptrtyp.Kind() != reflect.Ptr {
@@ -137,6 +141,11 @@ func (p *Parser) emitReadStruct(data interface{}) {
 	for fieldIdx := 0; fieldIdx < nfields; fieldIdx++ {
 		fieldtyp := typ.Field(fieldIdx)
 		fieldval := val.Field(fieldIdx)
+		indent := make([]byte, (p.depth-1)*2)
+		for indent_idx := 0; indent_idx < len(indent); indent_idx++ {
+			indent[indent_idx] = ' '
+		}
+		fmt.Printf("%vfield %v %v\n", string(indent), fieldtyp.Name, fieldtyp.Type)
 
 		if !p.ifTagSatisfied(fieldtyp, ptrtyp, ptrval) {
 			continue
@@ -219,6 +228,8 @@ func (p *Parser) emitReadStruct(data interface{}) {
 
 	// Call data's Verify() method if it defines one
 	p.callVerify(data)
+
+	p.depth--
 }
 
 func buildPtr(val reflect.Value) interface{} {
@@ -370,31 +381,36 @@ func (p *Parser) EmitSkipNBytes(nbytes int) {
 }
 
 func (p *Parser) readFieldOfLimitedSize(tag, tagstr string, val reflect.Value, fieldtyp reflect.StructField, ptrval reflect.Value, index int) {
+	fmt.Printf("readFieldOfLimitedSize %v %v %v\n", tag, tagstr, fieldtyp.Name)
+	if len(tagstr) == 0 {
+		p.emitReadStruct(buildPtr(val))
+		return
+	}
+
 	var (
 		tmp_r   io.Reader
 		limit_r io.LimitedReader
 		size    int
 	)
-	if len(tagstr) > 0 {
-		if tagstr == "<inf>" {
-			p.RaiseError2("Invalid `%v` tag value while parsing '%v %v'. Can only use \"<inf>\" with slices.", tag, fieldtyp.Name, fieldtyp.Type)
-		} else {
-			size = int(p.parseRefTag(tag, tagstr, fieldtyp, ptrval, index))
-			if size > 0 {
-				tmp_r, limit_r = p.r, io.LimitedReader{p.r, int64(size)}
-				p.r = &limit_r
-			}
-		}
+
+	if tagstr == "<inf>" {
+		p.RaiseError2("Invalid `%v` tag value while parsing '%v %v'. Can only use \"<inf>\" with slices.", tag, fieldtyp.Name, fieldtyp.Type)
 	}
+
+	size = int(p.parseRefTag(tag, tagstr, fieldtyp, ptrval, index))
+	if size == 0 {
+		return
+	}
+
+	tmp_r, limit_r = p.r, io.LimitedReader{p.r, int64(size)}
+	p.r = &limit_r
 
 	p.emitReadStruct(buildPtr(val))
 
-	if size > 0 {
-		if limit_r.N != 0 {
-			p.RaiseError2("Error reading exactly %v bytes into '%v %v' of %v. Actual bytes read: %v", size, fieldtyp.Name, fieldtyp.Type, ptrval.Elem().Type(), int64(size)-limit_r.N)
-		}
-		p.r = tmp_r
+	if limit_r.N != 0 {
+		p.RaiseError2("Error reading exactly %v bytes into '%v %v' of %v. Actual bytes read: %v", size, fieldtyp.Name, fieldtyp.Type, ptrval.Elem().Type(), int64(size)-limit_r.N)
 	}
+	p.r = tmp_r
 }
 
 func (p *Parser) readSliceFromBytes(val reflect.Value, typ reflect.Type, buf []byte) {
