@@ -1,6 +1,5 @@
 package bingo
 
-// FIXME: add a test for error reading when size == 0
 // FIXME: add a test for double Verify call
 
 import (
@@ -89,7 +88,7 @@ func TestEmptySlice(t *testing.T) {
 	}
 
 	if p.offset != 0 {
-		t.Error("Non-zero offset after reading into zero-length slice (byte)")
+		t.Error("Non-zero offset:", p.offset)
 	}
 
 	///
@@ -97,18 +96,17 @@ func TestEmptySlice(t *testing.T) {
 	intSlice := struct {
 		Data []uint16
 	}{}
-	p = newParser()
 
 	if err := p.EmitReadStruct(&intSlice); err != nil {
 		t.Error(err)
 	}
 
 	if p.offset != 0 {
-		t.Error("Non-zero offset after reading into zero-length slice (uint16)")
+		t.Error("Non-zero offset:", p.offset)
 	}
 }
 
-func TestLength32Little(t *testing.T) {
+func TestSingleLittle(t *testing.T) {
 	s := struct {
 		Length uint32
 	}{}
@@ -120,52 +118,14 @@ func TestLength32Little(t *testing.T) {
 	}
 
 	if s.Length != 0x1000A {
-		t.Error("Failed to read a single-field struct of uint32 (little):", s.Length)
+		t.Error("Wrong Length value:", s.Length)
 	}
 	if p.offset != 4 {
-		t.Error("Invalid offset after reading uint32 (little):", p.offset)
+		t.Error("Invalid offset:", p.offset)
 	}
 }
 
-func TestLength16Little(t *testing.T) {
-	s := struct {
-		Length uint16
-	}{}
-	p := newParser()
-	p.byteOrder = LittleEndian
-
-	if err := p.EmitReadStruct(&s); err != nil {
-		t.Error(err)
-	}
-
-	if s.Length != 10 {
-		t.Error("Failed to read a single-field struct of uint16 (little):", s.Length)
-	}
-	if p.offset != 2 {
-		t.Error("Invalid offset after reading uint16 (little):", p.offset)
-	}
-}
-
-func TestLength32Big(t *testing.T) {
-	s := struct {
-		Length uint32
-	}{}
-	p := newParser()
-	p.byteOrder = BigEndian
-
-	if err := p.EmitReadStruct(&s); err != nil {
-		t.Error(err)
-	}
-
-	if s.Length != 0x0A000100 {
-		t.Error("Failed to read a single-field struct of uint32 (big):", s.Length)
-	}
-	if p.offset != 4 {
-		t.Error("Invalid offset after reading uint32 (big):", p.offset)
-	}
-}
-
-func TestLength16Big(t *testing.T) {
+func TestSingleBig(t *testing.T) {
 	s := struct {
 		Length uint16
 	}{}
@@ -177,10 +137,10 @@ func TestLength16Big(t *testing.T) {
 	}
 
 	if s.Length != 0x0A00 {
-		t.Error("Failed to read a single-field struct of uint16 (big):", s.Length)
+		t.Error("Wrong Length value:", s.Length)
 	}
 	if p.offset != 2 {
-		t.Error("Invalid offset after reading uint16 (big):", p.offset)
+		t.Error("Invalid offset:", p.offset)
 	}
 }
 
@@ -277,6 +237,27 @@ func TestNonSliceInfSizeTag(t *testing.T) {
 	}
 
 	if p.offset != 4 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
+type EmbeddedSizeStruct struct {
+	Embedded `size:"Size()"`
+}
+
+func (e *EmbeddedSizeStruct) Size(p *Parser) int {
+	return 0
+}
+
+func TestZeroSizeStruct(t *testing.T) {
+	s := EmbeddedSizeStruct{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if p.offset != 0 {
 		t.Error("Invalid offset:", p.offset)
 	}
 }
@@ -422,13 +403,13 @@ func TestSliceByte(t *testing.T) {
 	}
 
 	if s.Length != 10 {
-		t.Error("Failed to read correct length for slice (uint16):", s.Length)
+		t.Error("Invalid Length:", s.Length)
 	}
 	if string(s.Data) != "\x01\x00abcdefgh" {
-		t.Error("Invalid data read into []byte:", s.Data)
+		t.Error("Invalid data read into Data []byte:", s.Data)
 	}
 	if p.offset != 12 {
-		t.Error("Invalid parser offset after byte slice:", p.offset)
+		t.Error("Invalid offset:", p.offset)
 	}
 }
 
@@ -445,13 +426,13 @@ func TestSliceInt(t *testing.T) {
 	}
 
 	if s.Length != 4 {
-		t.Error("Failed to read correct length for slice (uint32):", s.Length)
+		t.Error("Invalid Length:", s.Length)
 	}
 	if !(uint32(len(s.Data)) == s.Length && isEqualu16(s.Data, []uint16{1, 2, 3, 4})) {
-		t.Error("Invalid data read into []byte:", s.Data)
+		t.Error("Invalid data read into Data []byte:", s.Data)
 	}
 	if p.offset != uint(len(data)) {
-		t.Error("Invalid parser offset after parsing int slice:", p.offset)
+		t.Error("Invalid offset:", p.offset)
 	}
 }
 
