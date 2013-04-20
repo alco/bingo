@@ -72,20 +72,18 @@ type Verifier interface {
 	Verify(*Parser) error
 }
 
-func (p *Parser) callVerify(data interface{}) {
-	if dat, ok := data.(Verifier); ok {
-		fmt.Printf("Calling Verify on %v\n", reflect.TypeOf(data))
-		err := dat.Verify(p)
-		if err != nil {
-			p.RaiseError(err)
+func (p *Parser) callVerify(methodName string, data interface{}) {
+	typ := reflect.TypeOf(data)
+	if meth, ok := typ.MethodByName(methodName); ok {
+		ctxval := reflect.ValueOf(p)
+		dataval := reflect.ValueOf(data)
+		// TODO: check signature
+		retval := meth.Func.Call([]reflect.Value{dataval, ctxval})[0]
+		if !retval.IsNil() {
+			p.RaiseError2("Aborting: method '%v' on '%v' returned error '%v'", methodName, typ, retval.Interface())
 		}
 	} else {
-		typ := reflect.TypeOf(data)
-		if typ != nil {
-			if _, ok := typ.MethodByName("Verify"); ok {
-				p.RaiseError2("Type %v has a Verify() method with incorrect signature. Expected: Verify(p *bingo.Parser) error.", typ)
-			}
-		}
+		p.RaiseError2("Proper '%v' method not found on the type %v.", methodName, typ)
 	}
 }
 
@@ -219,15 +217,18 @@ func (p *Parser) emitReadStruct(data interface{}) {
 			}
 		}
 
+
+		// Call field's verification method if it defines one
+		if afterkey := fieldtyp.Tag.Get("after"); len(afterkey) > 0 {
+			p.callVerify(afterkey, data)
+		}
+
 		// Read any remaining padding bytes before proceeding to the next field
 		padding := p.calculatePadding(fieldtyp, offset)
 		if padding > 0 {
 			p.EmitSkipNBytes(int(padding))
 		}
 	}
-
-	// Call data's Verify() method if it defines one
-	p.callVerify(data)
 
 	p.depth--
 }

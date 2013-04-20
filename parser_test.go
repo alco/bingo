@@ -1,6 +1,7 @@
 package bingo
 
 // FIXME: add a test for error reading when size == 0
+// FIXME: add a test for double Verify call
 
 import (
 	"bytes"
@@ -471,7 +472,7 @@ type FixedSizeStruct struct {
 	Height    int32
 	Width     int8
 	Depth     uint8
-	ColorMode int64
+	ColorMode int64 `after:"Verify"`
 }
 
 func (s *FixedSizeStruct) Verify(p *Parser) error {
@@ -1085,25 +1086,53 @@ func TestReadUntilEOF(t *testing.T) {
 	}
 }
 
-type WrongVerifier struct {
+type MissingVerifier struct {
+	Length uint32 `after:"Verify"`
 }
 
-func (w *WrongVerifier) Verify() {
-}
+// FIXME:
+//func (m *MissingVerifier) Verify() bool {
+//	return false
+//}
 
-func TestVerifyDetect(t *testing.T) {
-	s := WrongVerifier{}
+func TestMissingVerify(t *testing.T) {
+	s := MissingVerifier{}
 	p := newParser()
 
 	if err := p.EmitReadStruct(&s); err != nil {
-		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Type *bingo.WrongVerifier has a Verify() method with incorrect signature. Expected: Verify(p *bingo.Parser) error." {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Proper 'Verify' method not found on the type *bingo.MissingVerifier." {
 			t.Error("Incorrect error:", err)
 		}
 	} else {
 		t.Error()
 	}
 
-	if p.offset != 0 {
+	if p.offset != 4 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
+type FailingVerifier struct {
+	Length uint32 `after:"VerifyLength"`
+}
+
+func (f *FailingVerifier) VerifyLength(p *Parser) error {
+	return errors.New("Verification error")
+}
+
+func TestFailingVerifier(t *testing.T) {
+	s := FailingVerifier{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Aborting: method 'VerifyLength' on '*bingo.FailingVerifier' returned error 'Verification error'" {
+			t.Error("Incorrect error:", err)
+		}
+	} else {
+		t.Error()
+	}
+
+	if p.offset != 4 {
 		t.Error("Invalid offset:", p.offset)
 	}
 }
