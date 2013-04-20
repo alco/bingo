@@ -1,10 +1,9 @@
 package bingo
 
-// FIXME: add a test for double Verify call
-
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"testing"
 	"unicode/utf16"
 )
@@ -1107,6 +1106,56 @@ func TestFailingVerifier(t *testing.T) {
 
 	if err := p.EmitReadStruct(&s); err != nil {
 		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Aborting: method 'VerifyLength' on '*bingo.FailingVerifier' returned error 'Verification error'" {
+			t.Error("Incorrect error:", err)
+		}
+	} else {
+		t.Error()
+	}
+
+	if p.offset != 4 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
+type Inner struct {
+	Field uint32 `after:"Verify"`
+}
+
+func (i *Inner) Verify(p *Parser) error {
+	if i.Field != 65546 {
+		return errors.New(fmt.Sprint("Incorrect field value:", i.Field))
+	}
+	i.Field++
+	return nil
+}
+
+type EmbeddedVerify struct {
+	Inner
+}
+
+func TestEmbeddedVerify(t *testing.T) {
+	s := EmbeddedVerify{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		t.Error(err)
+	}
+
+	if p.offset != 4 {
+		t.Error("Invalid offset:", p.offset)
+	}
+}
+
+type EmbeddedVerifyAfter struct {
+	Inner `after:"Verify"`
+}
+
+func TestEmbeddedVerifyAfter(t *testing.T) {
+	s := EmbeddedVerifyAfter{}
+	p := newParser()
+
+	if err := p.EmitReadStruct(&s); err != nil {
+		if perr, ok := err.(*ParseError); !ok || perr.Error() != "Aborting: method 'Verify' on '*bingo.EmbeddedVerifyAfter' returned error 'Incorrect field value:65547'" {
 			t.Error("Incorrect error:", err)
 		}
 	} else {
