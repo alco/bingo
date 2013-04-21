@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"os"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -42,6 +44,7 @@ type Parser struct {
 	offset    uint
 	context   interface{}
 	depth     int
+	l         *log.Logger
 
 	Tags map[string]interface{}
 
@@ -50,7 +53,12 @@ type Parser struct {
 }
 
 func NewParser(r io.Reader, byteOrder ByteOrder, options ParseOptions) *Parser {
-	p := Parser{r: r, Tags: make(map[string]interface{}), byteOrder: byteOrder}
+	p := Parser{
+	r: r,
+	Tags: make(map[string]interface{}),
+	byteOrder: byteOrder,
+	l: log.New(os.Stderr, "[bingo]: ", 0),
+	}
 	if options&Strict != 0 {
 		p.strict = true
 	}
@@ -75,6 +83,7 @@ type Verifier interface {
 func (p *Parser) callVerify(methodName string, data interface{}) {
 	typ := reflect.TypeOf(data)
 	if meth, ok := typ.MethodByName(methodName); ok {
+		p.l.Printf(">>Calling %v on %v\n", methodName, typ)
 		ctxval := reflect.ValueOf(p)
 		dataval := reflect.ValueOf(data)
 		// TODO: check signature
@@ -143,7 +152,7 @@ func (p *Parser) emitReadStruct(data interface{}) {
 		for indent_idx := 0; indent_idx < len(indent); indent_idx++ {
 			indent[indent_idx] = ' '
 		}
-		fmt.Printf("%vfield %v %v\n", string(indent), fieldtyp.Name, fieldtyp.Type)
+		p.l.Printf("%vParsing %v %v\n", string(indent), fieldtyp.Name, fieldtyp.Type)
 
 		if !p.ifTagSatisfied(fieldtyp, ptrtyp, ptrval) {
 			continue
@@ -382,7 +391,6 @@ func (p *Parser) EmitSkipNBytes(nbytes int) {
 }
 
 func (p *Parser) readFieldOfLimitedSize(tag, tagstr string, val reflect.Value, fieldtyp reflect.StructField, ptrval reflect.Value, index int) {
-	fmt.Printf("readFieldOfLimitedSize %v %v %v\n", tag, tagstr, fieldtyp.Name)
 	if len(tagstr) == 0 {
 		p.emitReadStruct(buildPtr(val))
 		return
