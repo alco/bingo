@@ -226,16 +226,15 @@ func (p *Parser) emitReadStruct(data interface{}) {
 			}
 		}
 
-
-		// Call field's verification method if it defines one
-		if afterkey := fieldtyp.Tag.Get("after"); len(afterkey) > 0 {
-			p.callVerify(afterkey, data)
-		}
-
 		// Read any remaining padding bytes before proceeding to the next field
 		padding := p.calculatePadding(fieldtyp, offset)
 		if padding > 0 {
 			p.EmitSkipNBytes(int(padding))
+		}
+
+		// Call field's verification method if it defines one
+		if afterkey := fieldtyp.Tag.Get("after"); len(afterkey) > 0 {
+			p.callVerify(afterkey, data)
 		}
 	}
 
