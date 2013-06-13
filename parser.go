@@ -33,7 +33,7 @@ var LittleEndian = binary.LittleEndian
 type ParseOptions int
 
 const (
-	Default ParseOptions = iota << 1
+	Default ParseOptions = 1 << iota
 	Strict
 	Panicky
 )
